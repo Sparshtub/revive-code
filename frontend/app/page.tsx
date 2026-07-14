@@ -13,6 +13,8 @@ interface ReviewResponse {
   message: string;
   score: number;
   issues: Issue[];
+  embedding?: number[];
+  surprise_scores?: number[];
 }
 
 interface HistoryItem {
@@ -21,6 +23,162 @@ interface HistoryItem {
   score: number;
   created_at: string;
 }
+
+// CodeBERT Neural Fingerprint Visualizer Component
+const NeuralFingerprint = ({ embedding }: { embedding: number[] }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !embedding || embedding.length < 768) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const rows = 24;
+    const cols = 32;
+    const cellWidth = canvas.width / cols;
+    const cellHeight = canvas.height / rows;
+    
+    let minVal = Math.min(...embedding);
+    let maxVal = Math.max(...embedding);
+    let range = maxVal - minVal || 1.0;
+    
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const val = embedding[r * cols + c];
+        const norm = (val - minVal) / range;
+        
+        let color = '';
+        if (norm < 0.5) {
+          const t = norm * 2;
+          const red = Math.round(24 + (204 - 24) * t);
+          const green = Math.round(23 + (120 - 23) * t);
+          const blue = Math.round(21 + (92 - 21) * t);
+          color = `rgb(${red}, ${green}, ${blue})`;
+        } else {
+          const t = (norm - 0.5) * 2;
+          const red = Math.round(204 + (250 - 204) * t);
+          const green = Math.round(120 + (249 - 120) * t);
+          const blue = Math.round(92 + (245 - 92) * t);
+          color = `rgb(${red}, ${green}, ${blue})`;
+        }
+        
+        ctx.fillStyle = color;
+        ctx.fillRect(c * cellWidth, r * cellHeight, cellWidth, cellHeight);
+      }
+    }
+  }, [embedding]);
+  
+  return (
+    <div className="bg-surface-dark border border-hairline/10 rounded-lg p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-purple-400 text-sm">🧠</span>
+          <h4 className="text-sm font-serif font-medium text-on-dark">CodeBERT Neural Fingerprint</h4>
+        </div>
+        <span className="text-[10px] font-mono text-on-dark-soft uppercase tracking-wider">
+          768 Dimensions
+        </span>
+      </div>
+      <canvas 
+        ref={canvasRef} 
+        width={320} 
+        height={240} 
+        className="w-full h-44 bg-surface-dark rounded-md overflow-hidden border border-hairline/5 shadow-inner"
+      />
+      <p className="text-[11px] text-on-dark-soft/70 mt-2.5 leading-relaxed font-sans">
+        This matrix maps the 768-dimensional activation representation vectors learned by CodeBERT for your sequence. Brighter cells indicate higher logic coefficients.
+      </p>
+    </div>
+  );
+};
+
+// CodeBERT Complexity Gutter Heatmap Component
+const ComplexityProfiler = ({ surpriseScores, code }: { surpriseScores: number[], code: string }) => {
+  const [showAll, setShowAll] = useState(false);
+  const lines = code.split("\n");
+  
+  const scoredLines = lines.map((text, idx) => ({
+    lineNum: idx + 1,
+    text: text.trim(),
+    score: surpriseScores[idx] || 0.0
+  })).filter(line => line.text.length > 0);
+  
+  const sortedLines = [...scoredLines].sort((a, b) => b.score - a.score);
+  const maxScoreLine = sortedLines[0];
+  
+  const getHeatBarColor = (score: number) => {
+    if (score >= 75) return 'bg-error';
+    if (score >= 50) return 'bg-accent-amber';
+    if (score >= 25) return 'bg-warning';
+    return 'bg-success';
+  };
+
+  const displayLines = showAll ? scoredLines : scoredLines.slice(0, 5);
+
+  return (
+    <div className="bg-surface-card border border-hairline rounded-lg p-6 space-y-4">
+      <div className="flex items-center justify-between border-b border-hairline pb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🔥</span>
+          <h4 className="text-lg font-serif font-medium text-ink">Complexity Profiler</h4>
+        </div>
+        {maxScoreLine && maxScoreLine.score > 20 && (
+          <span className="text-[10px] font-sans font-semibold px-2 py-0.5 rounded-full bg-error/10 text-error border border-error/20 animate-pulse">
+            Hottest: Line {maxScoreLine.lineNum}
+          </span>
+        )}
+      </div>
+      
+      {maxScoreLine && (
+        <div className="bg-surface-soft border border-hairline rounded-md p-4 flex items-start gap-3">
+          <span className="text-xl mt-0.5">💡</span>
+          <div>
+            <span className="text-xs font-sans font-semibold text-muted uppercase tracking-wider block mb-1">AI Logic Insights</span>
+            <p className="text-xs text-body leading-relaxed">
+              Line <span className="font-semibold text-ink font-mono">{maxScoreLine.lineNum}</span> has the highest surprise coefficient ({maxScoreLine.score}% surprise score). CodeBERT flags this block as logically dense or non-standard.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3 pt-1">
+        <span className="text-[10px] font-sans font-semibold text-muted uppercase tracking-wider block">Line Complexity Profile</span>
+        <div className="space-y-2">
+          {displayLines.map((line) => (
+            <div key={line.lineNum} className="flex items-center gap-4 text-xs">
+              <span className="w-6 font-mono text-muted text-right">{line.lineNum}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-center mb-1 text-[11px]">
+                  <span className="font-mono text-ink truncate max-w-[200px]" title={line.text}>
+                    {line.text}
+                  </span>
+                  <span className="font-mono font-medium text-muted">{line.score}%</span>
+                </div>
+                <div className="w-full bg-surface-soft h-1.5 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full ${getHeatBarColor(line.score)}`} 
+                    style={{ width: `${line.score}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        {scoredLines.length > 5 && (
+          <button
+            type="button"
+            onClick={() => setShowAll(!showAll)}
+            className="text-xs text-primary hover:text-primary-active font-medium mt-2 w-full text-center hover:underline focus:outline-none block"
+          >
+            {showAll ? 'Show top 5 lines' : `Show all ${scoredLines.length} lines`}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export default function Home() {
   const { user, token, isAuthenticated, logout } = useAuth();
@@ -670,6 +828,20 @@ export default function Home() {
                     documentation: Math.max(reviewResult.score - 20, 40),
                   }}
                 />
+
+                {/* CodeBERT Neural Fingerprint */}
+                {reviewResult.embedding && reviewResult.embedding.length > 0 && (
+                  <NeuralFingerprint embedding={reviewResult.embedding} />
+                )}
+
+                {/* Line Complexity Gutter heat map */}
+                {reviewResult.surprise_scores && reviewResult.surprise_scores.length > 0 && (
+                  <ComplexityProfiler 
+                    surpriseScores={reviewResult.surprise_scores} 
+                    code={code}
+                  />
+                )}
+                
                 <ReviewCard issues={reviewResult.issues} />
               </div>
             )}

@@ -138,6 +138,7 @@ def analyze_repo_files(files: List[Dict[str, str]]) -> Dict[str, Any]:
     """
     all_issues = []
     scores = []
+    embeddings = []
     
     for file_info in files:
         try:
@@ -157,18 +158,30 @@ def analyze_repo_files(files: List[Dict[str, str]]) -> Dict[str, Any]:
                 all_issues.append(issue)
                 
             scores.append(analysis["score"])
+            if "embedding" in analysis and analysis["embedding"]:
+                embeddings.append(analysis["embedding"])
         except Exception:
             pass
             
     # Calculate overall average score
     overall_score = round(sum(scores) / len(scores)) if scores else 100
     
+    # Calculate aggregated mean embedding of the repository
+    repo_embedding = [0.0] * 768
+    if embeddings:
+        for emb in embeddings:
+            for i in range(768):
+                repo_embedding[i] += emb[i]
+        for i in range(768):
+            repo_embedding[i] /= len(embeddings)
+            
     # Sort issues by file path and then by line number
     all_issues.sort(key=lambda x: (x.get("file", ""), x.get("line", 0)))
     
     return {
         "score": overall_score,
-        "issues": all_issues
+        "issues": all_issues,
+        "embedding": repo_embedding
     }
 
 @router.post("/github/repository")
@@ -203,14 +216,16 @@ async def review_repository(request: RepoReviewRequest, current_user: dict = Dep
             try:
                 # Store aggregated report
                 cursor.execute(
-                    "INSERT INTO reviews (id, user_id, code, language, score, issues) VALUES (?, ?, ?, ?, ?, ?);",
+                    "INSERT INTO reviews (id, user_id, code, language, score, issues, embedding, surprise_scores) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
                     (
                         review_id,
                         current_user["id"],
                         f"GitHub Repository: {repo_url}\nBranch: {branch}\nFiles Scanned: {len(files)}",
                         "multiple",
                         results["score"],
-                        json_dumps_with_utf8(results["issues"])
+                        json_dumps_with_utf8(results["issues"]),
+                        json_dumps_with_utf8(results["embedding"]),
+                        json_dumps_with_utf8([])
                     )
                 )
                 conn.commit()
@@ -268,14 +283,16 @@ async def review_pr(request: PRReviewRequest, current_user: dict = Depends(get_o
             cursor = conn.cursor()
             try:
                 cursor.execute(
-                    "INSERT INTO reviews (id, user_id, code, language, score, issues) VALUES (?, ?, ?, ?, ?, ?);",
+                    "INSERT INTO reviews (id, user_id, code, language, score, issues, embedding, surprise_scores) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
                     (
                         review_id,
                         current_user["id"],
                         f"GitHub Pull Request: {repo_url} (PR #{pr_number})\nFiles Scanned: {len(files)}",
                         "multiple",
                         results["score"],
-                        json_dumps_with_utf8(results["issues"])
+                        json_dumps_with_utf8(results["issues"]),
+                        json_dumps_with_utf8(results["embedding"]),
+                        json_dumps_with_utf8([])
                     )
                 )
                 conn.commit()

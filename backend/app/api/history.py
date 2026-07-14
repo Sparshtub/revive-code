@@ -39,7 +39,7 @@ async def get_review(id: str, current_user: dict = Depends(get_current_user)):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, user_id, code, language, score, issues, created_at FROM reviews WHERE id = ?;",
+        "SELECT id, user_id, code, language, score, issues, embedding, surprise_scores, created_at FROM reviews WHERE id = ?;",
         (id,)
     )
     row = cursor.fetchone()
@@ -62,12 +62,24 @@ async def get_review(id: str, current_user: dict = Depends(get_current_user)):
     except Exception:
         issues_list = []
         
+    try:
+        embedding_list = json.loads(row["embedding"]) if row["embedding"] else []
+    except Exception:
+        embedding_list = []
+
+    try:
+        surprise_scores_list = json.loads(row["surprise_scores"]) if row["surprise_scores"] else []
+    except Exception:
+        surprise_scores_list = []
+        
     return {
         "id": row["id"],
         "code": row["code"],
         "language": row["language"],
         "score": row["score"],
         "issues": issues_list,
+        "embedding": embedding_list,
+        "surprise_scores": surprise_scores_list,
         "created_at": row["created_at"]
     }
 

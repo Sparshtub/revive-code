@@ -7,6 +7,7 @@ export interface Issue {
   description: string;
   suggestion?: string;
   file?: string;
+  is_ai?: boolean;
 }
 
 interface ReviewCardProps {
@@ -62,15 +63,27 @@ export default function ReviewCard({ issues }: ReviewCardProps) {
       <div className="space-y-4">
         {issues.map((issue, idx) => {
           const styles = getSeverityStyles(issue.severity);
+          const isAI = issue.is_ai;
           return (
             <div 
               key={idx} 
-              className={`p-6 rounded-lg border transition-all duration-300 hover:translate-x-1 ${styles.card}`}
+              className={`p-6 rounded-lg border transition-all duration-300 hover:translate-x-1 ${
+                isAI 
+                  ? 'border-purple-300/40 bg-purple-500/5 shadow-sm shadow-purple-500/5' 
+                  : styles.card
+              }`}
             >
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-lg">{styles.icon}</span>
-                  <h4 className="text-lg font-serif font-semibold text-ink">{issue.title}</h4>
+                  <span className="text-lg">{isAI ? '✨' : styles.icon}</span>
+                  <h4 className="text-lg font-serif font-semibold text-ink flex items-center gap-2">
+                    {issue.title}
+                    {isAI && (
+                      <span className="text-[10px] font-sans font-semibold tracking-wider uppercase bg-purple-500/10 text-purple-700 px-2 py-0.5 rounded-full border border-purple-500/20">
+                        AI Check
+                      </span>
+                    )}
+                  </h4>
                 </div>
                 <div className="flex items-center gap-2 self-start sm:self-auto">
                   {issue.file && (
@@ -83,7 +96,9 @@ export default function ReviewCard({ issues }: ReviewCardProps) {
                       Line {issue.line}
                     </span>
                   )}
-                  <span className={`text-xs px-2.5 py-1 rounded-sm border font-semibold tracking-wide uppercase ${styles.badge}`}>
+                  <span className={`text-xs px-2.5 py-1 rounded-sm border font-semibold tracking-wide uppercase ${
+                    isAI ? 'bg-purple-100 text-purple-700 border-purple-300/40' : styles.badge
+                  }`}>
                     {issue.severity}
                   </span>
                 </div>

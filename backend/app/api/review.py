@@ -10,6 +10,7 @@ from typing import List, Dict, Any
 from tree_sitter_languages import get_language, get_parser
 from app.db import get_db_connection
 from app.api.dependencies import get_optional_current_user
+from app.api.ai_service import get_code_embeddings, detect_logical_anomalies, compute_surprise_scores
 
 router = APIRouter()
 
@@ -348,6 +349,12 @@ def perform_raw_analysis(code: str, language: str, file_path_on_disk: str = None
                     except Exception:
                         pass
 
+    # 4. Run CodeBERT AI analysis (Embeddings, Logical Anomalies, and Surprise/Complexity scores)
+    embedding = get_code_embeddings(code)
+    surprise_scores = compute_surprise_scores(code)
+    ai_anomalies = detect_logical_anomalies(code, language)
+    aggregated_issues.extend(ai_anomalies)
+
     # Deduct overall scores based on severity metrics
     deductions = {
         "critical": 15,
@@ -375,7 +382,12 @@ def perform_raw_analysis(code: str, language: str, file_path_on_disk: str = None
     # Sort issues by line number
     unique_issues.sort(key=lambda x: x.get("line", 0))
     
-    return {"score": score, "issues": unique_issues}
+    return {
+        "score": score,
+        "issues": unique_issues,
+        "embedding": embedding,
+        "surprise_scores": surprise_scores
+    }
 
 @router.post("/review")
 async def review_code(request: ReviewRequest, current_user: dict = Depends(get_optional_current_user)):
@@ -385,6 +397,8 @@ async def review_code(request: ReviewRequest, current_user: dict = Depends(get_o
     res = perform_raw_analysis(request.code, request.language)
     score = res["score"]
     unique_issues = res["issues"]
+    embedding = res["embedding"]
+    surprise_scores = res["surprise_scores"]
 
     review_id = str(uuid.uuid4())
     if current_user:
@@ -392,8 +406,8 @@ async def review_code(request: ReviewRequest, current_user: dict = Depends(get_o
         cursor = conn.cursor()
         try:
             cursor.execute(
-                "INSERT INTO reviews (id, user_id, code, language, score, issues) VALUES (?, ?, ?, ?, ?, ?);",
-                (review_id, current_user["id"], request.code, request.language, score, json.dumps(unique_issues))
+                "INSERT INTO reviews (id, user_id, code, language, score, issues, embedding, surprise_scores) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
+                (review_id, current_user["id"], request.code, request.language, score, json.dumps(unique_issues), json.dumps(embedding), json.dumps(surprise_scores))
             )
             conn.commit()
         except Exception as e:
@@ -406,5 +420,7 @@ async def review_code(request: ReviewRequest, current_user: dict = Depends(get_o
         "status": "success",
         "message": "Review completed successfully",
         "score": score,
-        "issues": unique_issues
+        "issues": unique_issues,
+        "embedding": embedding,
+        "surprise_scores": surprise_scores
     }
