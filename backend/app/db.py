@@ -44,6 +44,8 @@ def init_db():
             issues TEXT NOT NULL, -- JSON serialized issues list
             embedding TEXT, -- JSON serialized CodeBERT embedding float list
             surprise_scores TEXT, -- JSON serialized line surprise scores
+            category_scores TEXT, -- JSON serialized category-wise scores
+            summary TEXT, -- Text review summary
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
         );
@@ -57,6 +59,16 @@ def init_db():
         
     try:
         cursor.execute("ALTER TABLE reviews ADD COLUMN surprise_scores TEXT;")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE reviews ADD COLUMN category_scores TEXT;")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE reviews ADD COLUMN summary TEXT;")
     except sqlite3.OperationalError:
         pass
     

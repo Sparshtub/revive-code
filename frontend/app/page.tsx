@@ -12,10 +12,76 @@ interface ReviewResponse {
   status: string;
   message: string;
   score: number;
+  overallScore?: number;
+  categoryScores?: {
+    readability: number;
+    security: number;
+    performance: number;
+    maintainability: number;
+    documentation: number;
+    bestPractices: number;
+  };
+  severityCounts?: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    info: number;
+  };
+  summary?: string;
   issues: Issue[];
   embedding?: number[];
   surprise_scores?: number[];
 }
+
+// Severity Counts Breakdown Visualizer
+const SeverityBreakdown = ({ counts }: { counts: { critical: number; high: number; medium: number; low: number; info: number } }) => {
+  return (
+    <div className="bg-surface-card border border-hairline rounded-lg p-6 space-y-4">
+      <div className="flex items-center gap-2 border-b border-hairline pb-3">
+        <span className="text-lg">📊</span>
+        <h4 className="text-lg font-serif font-medium text-ink">Issues by Severity</h4>
+      </div>
+      <div className="grid grid-cols-5 gap-2.5 text-center">
+        <div className="p-3 bg-red-500/5 border border-red-500/20 rounded-md">
+          <span className="block text-[10px] font-sans font-bold uppercase tracking-wider text-red-500 mb-1">Critical</span>
+          <span className="text-xl font-semibold text-red-600">{counts.critical}</span>
+        </div>
+        <div className="p-3 bg-orange-500/5 border border-orange-500/20 rounded-md">
+          <span className="block text-[10px] font-sans font-bold uppercase tracking-wider text-orange-500 mb-1">High</span>
+          <span className="text-xl font-semibold text-orange-600">{counts.high}</span>
+        </div>
+        <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-md">
+          <span className="block text-[10px] font-sans font-bold uppercase tracking-wider text-amber-500 mb-1">Medium</span>
+          <span className="text-xl font-semibold text-amber-600">{counts.medium}</span>
+        </div>
+        <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-md">
+          <span className="block text-[10px] font-sans font-bold uppercase tracking-wider text-emerald-500 mb-1">Low</span>
+          <span className="text-xl font-semibold text-emerald-600">{counts.low}</span>
+        </div>
+        <div className="p-3 bg-slate-500/5 border border-slate-500/20 rounded-md">
+          <span className="block text-[10px] font-sans font-bold uppercase tracking-wider text-slate-500 mb-1">Info</span>
+          <span className="text-xl font-semibold text-slate-600">{counts.info}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// AI Review Summary Editorial Callout
+const AIReviewSummary = ({ summary }: { summary: string }) => {
+  return (
+    <div className="bg-surface-card border border-hairline rounded-lg p-6 space-y-3">
+      <div className="flex items-center gap-2 border-b border-hairline pb-3">
+        <span className="text-lg">✨</span>
+        <h4 className="text-lg font-serif font-medium text-ink">AI Code Review Summary</h4>
+      </div>
+      <p className="text-sm text-body leading-relaxed font-sans first-letter:text-2xl first-letter:font-serif first-letter:font-semibold first-letter:text-primary">
+        {summary}
+      </p>
+    </div>
+  );
+};
 
 interface HistoryItem {
   id: string;
@@ -819,15 +885,26 @@ export default function Home() {
             {reviewResult && (
               <div className="space-y-6">
                 <ScoreCard
-                  overallScore={reviewResult.score}
-                  categories={{
+                  overallScore={reviewResult.overallScore !== undefined ? reviewResult.overallScore : reviewResult.score}
+                  categories={reviewResult.categoryScores || {
                     readability: reviewResult.score,
                     security: Math.max(reviewResult.score - 10, 50),
                     performance: Math.min(reviewResult.score + 5, 100),
                     maintainability: reviewResult.score,
                     documentation: Math.max(reviewResult.score - 20, 40),
+                    bestPractices: reviewResult.score,
                   }}
                 />
+
+                {/* AI Review Summary Editorial Card */}
+                {reviewResult.summary && (
+                  <AIReviewSummary summary={reviewResult.summary} />
+                )}
+
+                {/* Severity Breakdown Visualizer */}
+                {reviewResult.severityCounts && (
+                  <SeverityBreakdown counts={reviewResult.severityCounts} />
+                )}
 
                 {/* CodeBERT Neural Fingerprint */}
                 {reviewResult.embedding && reviewResult.embedding.length > 0 && (

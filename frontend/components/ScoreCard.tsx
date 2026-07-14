@@ -28,6 +28,7 @@ interface ScoreCardProps {
     performance: number;
     maintainability: number;
     documentation: number;
+    bestPractices?: number;
   };
 }
 
@@ -52,12 +53,13 @@ export default function ScoreCard({ overallScore, categories }: ScoreCardProps) 
         </div>
       </div>
       
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <ScoreCategory label="Readability" score={categories.readability} />
         <ScoreCategory label="Security" score={categories.security} />
         <ScoreCategory label="Performance" score={categories.performance} />
         <ScoreCategory label="Maintainability" score={categories.maintainability} />
         <ScoreCategory label="Documentation" score={categories.documentation} />
+        <ScoreCategory label="Best Practices" score={categories.bestPractices !== undefined ? categories.bestPractices : overallScore} />
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ from tree_sitter_languages import get_language, get_parser
 from app.db import get_db_connection
 from app.api.dependencies import get_optional_current_user
 from app.api.ai_service import get_code_embeddings, detect_logical_anomalies, compute_surprise_scores
+from app.services import scoring_service, summary_service
 
 router = APIRouter()
 
@@ -355,21 +356,6 @@ def perform_raw_analysis(code: str, language: str, file_path_on_disk: str = None
     ai_anomalies = detect_logical_anomalies(code, language)
     aggregated_issues.extend(ai_anomalies)
 
-    # Deduct overall scores based on severity metrics
-    deductions = {
-        "critical": 15,
-        "high": 10,
-        "medium": 5,
-        "low": 2
-    }
-    
-    score = base_score
-    for issue in aggregated_issues:
-        sev = issue.get("severity", "low").lower()
-        score -= deductions.get(sev, 2)
-        
-    score = max(10, min(100, score))
-    
     # Clean up duplicate issues (same line and title)
     unique_issues = []
     seen = set()
@@ -382,9 +368,24 @@ def perform_raw_analysis(code: str, language: str, file_path_on_disk: str = None
     # Sort issues by line number
     unique_issues.sort(key=lambda x: x.get("line", 0))
     
+    # Calculate detailed scores
+    # base_score represents Radon Maintainability Index for python, default 100.0 otherwise
+    scoring_result = scoring_service.calculate_scores(unique_issues, radon_mi=base_score)
+    overall_score = scoring_result["overallScore"]
+    category_scores = scoring_result["categoryScores"]
+    severity_counts = scoring_result["severityCounts"]
+    updated_issues = scoring_result["issues"]
+    
+    # Generate review summary
+    summary = summary_service.generate_summary(overall_score, category_scores, updated_issues)
+    
     return {
-        "score": score,
-        "issues": unique_issues,
+        "score": overall_score,  # Keep for backward compatibility
+        "overallScore": overall_score,
+        "categoryScores": category_scores,
+        "severityCounts": severity_counts,
+        "summary": summary,
+        "issues": updated_issues,
         "embedding": embedding,
         "surprise_scores": surprise_scores
     }
@@ -395,8 +396,11 @@ async def review_code(request: ReviewRequest, current_user: dict = Depends(get_o
         raise HTTPException(status_code=400, detail="Code content cannot be empty")
         
     res = perform_raw_analysis(request.code, request.language)
-    score = res["score"]
-    unique_issues = res["issues"]
+    overall_score = res["overallScore"]
+    category_scores = res["categoryScores"]
+    severity_counts = res["severityCounts"]
+    summary = res["summary"]
+    updated_issues = res["issues"]
     embedding = res["embedding"]
     surprise_scores = res["surprise_scores"]
 
@@ -406,8 +410,19 @@ async def review_code(request: ReviewRequest, current_user: dict = Depends(get_o
         cursor = conn.cursor()
         try:
             cursor.execute(
-                "INSERT INTO reviews (id, user_id, code, language, score, issues, embedding, surprise_scores) VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
-                (review_id, current_user["id"], request.code, request.language, score, json.dumps(unique_issues), json.dumps(embedding), json.dumps(surprise_scores))
+                "INSERT INTO reviews (id, user_id, code, language, score, issues, embedding, surprise_scores, category_scores, summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+                (
+                    review_id, 
+                    current_user["id"], 
+                    request.code, 
+                    request.language, 
+                    overall_score, 
+                    json.dumps(updated_issues), 
+                    json.dumps(embedding), 
+                    json.dumps(surprise_scores),
+                    json.dumps(category_scores),
+                    summary
+                )
             )
             conn.commit()
         except Exception as e:
@@ -419,8 +434,12 @@ async def review_code(request: ReviewRequest, current_user: dict = Depends(get_o
         "id": review_id,
         "status": "success",
         "message": "Review completed successfully",
-        "score": score,
-        "issues": unique_issues,
+        "score": overall_score,  # Keep for backward compatibility
+        "overallScore": overall_score,
+        "categoryScores": category_scores,
+        "severityCounts": severity_counts,
+        "summary": summary,
+        "issues": updated_issues,
         "embedding": embedding,
         "surprise_scores": surprise_scores
     }
