@@ -4,7 +4,7 @@ import subprocess
 import json
 import re
 import uuid
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
 from typing import List, Dict, Any
 from tree_sitter_languages import get_language, get_parser
@@ -405,30 +405,31 @@ async def review_code(request: ReviewRequest, current_user: dict = Depends(get_o
     surprise_scores = res["surprise_scores"]
 
     review_id = str(uuid.uuid4())
-    if current_user:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                "INSERT INTO reviews (id, user_id, code, language, score, issues, embedding, surprise_scores, category_scores, summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-                (
-                    review_id, 
-                    current_user["id"], 
-                    request.code, 
-                    request.language, 
-                    overall_score, 
-                    json.dumps(updated_issues), 
-                    json.dumps(embedding), 
-                    json.dumps(surprise_scores),
-                    json.dumps(category_scores),
-                    summary
-                )
+    user_id = current_user["id"] if current_user else None
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO reviews (id, user_id, code, language, score, issues, embedding, surprise_scores, category_scores, summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+            (
+                review_id, 
+                user_id, 
+                request.code, 
+                request.language, 
+                overall_score, 
+                json.dumps(updated_issues), 
+                json.dumps(embedding), 
+                json.dumps(surprise_scores),
+                json.dumps(category_scores),
+                summary
             )
-            conn.commit()
-        except Exception as e:
-            conn.close()
-            raise HTTPException(status_code=500, detail=f"Database error saving review: {str(e)}")
+        )
+        conn.commit()
+    except Exception as e:
         conn.close()
+        raise HTTPException(status_code=500, detail=f"Database error saving review: {str(e)}")
+    conn.close()
 
     return {
         "id": review_id,
@@ -442,4 +443,101 @@ async def review_code(request: ReviewRequest, current_user: dict = Depends(get_o
         "issues": updated_issues,
         "embedding": embedding,
         "surprise_scores": surprise_scores
+    }
+
+@router.get("/review/{review_id}")
+async def get_review(review_id: str, current_user: dict = Depends(get_optional_current_user)):
+    """
+    Retrieves detailed information (including code and issues) for a specific review.
+    If the review is private (owned by a registered user), verifies the owner.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, user_id, code, language, score, issues, embedding, surprise_scores, category_scores, summary, created_at FROM reviews WHERE id = ?;",
+        (review_id,)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review report not found."
+        )
+        
+    # If owned by a user, check permission
+    owner_id = row["user_id"]
+    if owner_id is not None:
+        if not current_user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated"
+            )
+        if current_user["id"] != owner_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to access this review report."
+            )
+            
+    try:
+        issues_list = json.loads(row["issues"])
+    except Exception:
+        issues_list = []
+        
+    try:
+        embedding_list = json.loads(row["embedding"]) if row["embedding"] else []
+    except Exception:
+        embedding_list = []
+
+    try:
+        surprise_scores_list = json.loads(row["surprise_scores"]) if row["surprise_scores"] else []
+    except Exception:
+        surprise_scores_list = []
+
+    try:
+        category_scores = json.loads(row["category_scores"]) if row["category_scores"] else {}
+    except Exception:
+        category_scores = {}
+
+    severity_counts = {
+        "critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0
+    }
+    for issue in issues_list:
+        sev = issue.get("severity", "Low").lower()
+        if sev in severity_counts:
+            severity_counts[sev] += 1
+            
+    return {
+        "id": row["id"],
+        "code": row["code"],
+        "language": row["language"],
+        "score": row["score"],
+        "overallScore": row["score"],
+        "categoryScores": category_scores,
+        "severityCounts": severity_counts,
+        "summary": row["summary"],
+        "issues": issues_list,
+        "embedding": embedding_list,
+        "surprise_scores": surprise_scores_list,
+        "created_at": row["created_at"]
+    }
+
+@router.get("/review/{review_id}/summary")
+async def get_review_summary(review_id: str, current_user: dict = Depends(get_optional_current_user)):
+    review_data = await get_review(review_id, current_user)
+    return {"summary": review_data["summary"]}
+
+@router.get("/review/{review_id}/issues")
+async def get_review_issues(review_id: str, current_user: dict = Depends(get_optional_current_user)):
+    review_data = await get_review(review_id, current_user)
+    return {"issues": review_data["issues"]}
+
+@router.get("/review/{review_id}/scores")
+async def get_review_scores(review_id: str, current_user: dict = Depends(get_optional_current_user)):
+    review_data = await get_review(review_id, current_user)
+    return {
+        "overallScore": review_data["overallScore"],
+        "categoryScores": review_data["categoryScores"],
+        "severityCounts": review_data["severityCounts"]
     }

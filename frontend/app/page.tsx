@@ -6,6 +6,7 @@ import ScoreCard from '@/components/ScoreCard';
 import ReviewCard, { Issue } from '@/components/ReviewCard';
 import AuthModal from '@/components/AuthModal';
 import { useAuth } from '@/components/AuthContext';
+import ReviewDashboard from '@/components/dashboard/ReviewDashboard';
 
 interface ReviewResponse {
   id?: string;
@@ -32,6 +33,9 @@ interface ReviewResponse {
   issues: Issue[];
   embedding?: number[];
   surprise_scores?: number[];
+  code?: string;
+  language?: string;
+  created_at?: string;
 }
 
 // Severity Counts Breakdown Visualizer
@@ -610,320 +614,321 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Main Workspace Layout */}
       <main className="flex-1 bg-surface-soft border-b border-hairline py-12 px-6 sm:px-12">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* Left Panel: Code Workspace / GitHub Controls */}
-          <div className="lg:col-span-7 flex flex-col bg-surface-dark border border-hairline/10 rounded-lg overflow-hidden shadow-sm">
-            
-            {/* Workspace Controls Header */}
-            <div className="bg-surface-dark-elevated border-b border-hairline/5 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              
-              {/* Tab Selector */}
-              <div className="flex bg-surface-dark p-1 rounded-md border border-hairline/5">
-                <button
-                  onClick={() => setWorkspaceTab('paste')}
-                  className={`text-xs font-sans px-3.5 py-1.5 rounded-sm transition-colors font-medium ${
-                    workspaceTab === 'paste' 
-                      ? 'bg-surface-dark-elevated text-on-dark font-semibold' 
-                      : 'text-on-dark-soft hover:text-on-dark'
-                  }`}
-                >
-                  Paste Code
-                </button>
-                <button
-                  onClick={() => setWorkspaceTab('upload')}
-                  className={`text-xs font-sans px-3.5 py-1.5 rounded-sm transition-colors font-medium ${
-                    workspaceTab === 'upload' 
-                      ? 'bg-surface-dark-elevated text-on-dark font-semibold' 
-                      : 'text-on-dark-soft hover:text-on-dark'
-                  }`}
-                >
-                  Upload File
-                </button>
-                <button
-                  onClick={() => setWorkspaceTab('github')}
-                  className={`text-xs font-sans px-3.5 py-1.5 rounded-sm transition-colors font-medium ${
-                    workspaceTab === 'github' 
-                      ? 'bg-surface-dark-elevated text-on-dark font-semibold' 
-                      : 'text-on-dark-soft hover:text-on-dark'
-                  }`}
-                >
-                  GitHub Repository
-                </button>
-              </div>
-
-              {/* Language and Submit Group */}
-              <div className="flex items-center gap-3 self-end md:self-auto">
-                {workspaceTab !== 'github' && (
-                  <select
-                    value={language}
-                    onChange={(e) => setLanguage(e.target.value)}
-                    className="bg-surface-dark border border-hairline/10 rounded-sm text-xs px-3 py-1.5 text-on-dark focus:outline-none focus:ring-1 focus:ring-primary font-medium"
-                  >
-                    <option value="python">Python</option>
-                    <option value="javascript">JavaScript</option>
-                    <option value="typescript">TypeScript</option>
-                    <option value="java">Java</option>
-                    <option value="cpp">C++</option>
-                    <option value="go">Go</option>
-                  </select>
-                )}
-
-                {workspaceTab !== 'github' && (
-                  <button
-                    onClick={handleReview}
-                    disabled={loading}
-                    className="bg-primary hover:bg-primary-active text-on-primary font-medium text-xs rounded-sm px-5 py-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider"
-                  >
-                    {loading ? 'Analyzing...' : 'Analyze Code'}
-                  </button>
-                )}
-              </div>
+        {reviewResult ? (
+          <div className="space-y-6">
+            <div className="max-w-6xl mx-auto flex justify-between items-center font-sans">
+              <span className="text-xs text-muted">
+                Inspect analysis results or start a new scan.
+              </span>
+              <button
+                onClick={() => setReviewResult(null)}
+                className="text-xs font-semibold px-4 py-2 bg-primary hover:bg-primary-active text-on-primary rounded-sm transition-colors uppercase tracking-wider focus:outline-none"
+              >
+                &larr; New Scan
+              </button>
             </div>
-
-            {/* Tab Workspaces */}
-            <div className="flex-1 min-h-[500px] bg-surface-dark flex flex-col">
+            <ReviewDashboard
+              reviewData={{
+                id: reviewResult.id,
+                code: reviewResult.code || code,
+                language: reviewResult.language || language,
+                overallScore: reviewResult.overallScore !== undefined ? reviewResult.overallScore : reviewResult.score,
+                categoryScores: reviewResult.categoryScores || {
+                  readability: reviewResult.score,
+                  security: Math.max(reviewResult.score - 10, 50),
+                  performance: Math.min(reviewResult.score + 5, 100),
+                  maintainability: reviewResult.score,
+                  documentation: Math.max(reviewResult.score - 20, 40),
+                  bestPractices: reviewResult.score,
+                },
+                severityCounts: reviewResult.severityCounts || {
+                  critical: 0,
+                  high: 0,
+                  medium: 0,
+                  low: 0,
+                  info: 0,
+                },
+                summary: reviewResult.summary,
+                issues: reviewResult.issues,
+                embedding: reviewResult.embedding,
+                surprise_scores: reviewResult.surprise_scores,
+                created_at: reviewResult.created_at || new Date().toISOString(),
+              }}
+            />
+          </div>
+        ) : (
+          <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            {/* Left Panel: Code Workspace / GitHub Controls */}
+            <div className="lg:col-span-7 flex flex-col bg-surface-dark border border-hairline/10 rounded-lg overflow-hidden shadow-sm">
               
-              {/* Tab 1: Editor */}
-              {workspaceTab === 'paste' && (
-                <div className="flex-1 h-full">
-                  <Editor
-                    height="100%"
-                    language={language}
-                    theme="vs-dark"
-                    value={code}
-                    onChange={(value) => setCode(value || '')}
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 14,
-                      fontFamily: 'var(--font-mono), monospace',
-                      lineHeight: 22,
-                      padding: { top: 16, bottom: 16 },
-                      scrollbar: {
-                        vertical: 'visible',
-                        horizontal: 'visible',
-                      },
-                      roundedSelection: true,
-                      automaticLayout: true,
-                    }}
-                  />
+              {/* Workspace Controls Header */}
+              <div className="bg-surface-dark-elevated border-b border-hairline/5 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                
+                {/* Tab Selector */}
+                <div className="flex bg-surface-dark p-1 rounded-md border border-hairline/5">
+                  <button
+                    onClick={() => setWorkspaceTab('paste')}
+                    className={`text-xs font-sans px-3.5 py-1.5 rounded-sm transition-colors font-medium ${
+                      workspaceTab === 'paste' 
+                        ? 'bg-surface-dark-elevated text-on-dark font-semibold' 
+                        : 'text-on-dark-soft hover:text-on-dark'
+                    }`}
+                  >
+                    Paste Code
+                  </button>
+                  <button
+                    onClick={() => setWorkspaceTab('upload')}
+                    className={`text-xs font-sans px-3.5 py-1.5 rounded-sm transition-colors font-medium ${
+                      workspaceTab === 'upload' 
+                        ? 'bg-surface-dark-elevated text-on-dark font-semibold' 
+                        : 'text-on-dark-soft hover:text-on-dark'
+                    }`}
+                  >
+                    Upload File
+                  </button>
+                  <button
+                    onClick={() => setWorkspaceTab('github')}
+                    className={`text-xs font-sans px-3.5 py-1.5 rounded-sm transition-colors font-medium ${
+                      workspaceTab === 'github' 
+                        ? 'bg-surface-dark-elevated text-on-dark font-semibold' 
+                        : 'text-on-dark-soft hover:text-on-dark'
+                    }`}
+                  >
+                    GitHub Repository
+                  </button>
                 </div>
-              )}
 
-              {/* Tab 2: File Upload Zone */}
-              {workspaceTab === 'upload' && (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-on-dark-soft">
-                  <div className="border-2 border-dashed border-hairline/20 hover:border-primary/50 transition-colors rounded-lg p-12 max-w-md w-full flex flex-col items-center justify-center bg-surface-dark-soft/50">
-                    <span className="text-4xl mb-4 block">📁</span>
-                    <h4 className="text-base font-serif text-on-dark font-medium mb-1">Drag and drop your file</h4>
-                    <p className="text-xs text-on-dark-soft/80 mb-6 font-sans">
-                      Only UTF-8 encoded text files are supported (.py, .js, .ts, .go, .java, .cpp)
-                    </p>
-                    <input 
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleFileChange}
-                      className="hidden"
-                      accept=".py,.js,.jsx,.ts,.tsx,.go,.java,.cpp,.cc,.h"
-                    />
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="bg-surface-dark-elevated hover:bg-surface-dark text-on-dark border border-hairline/15 font-medium text-xs rounded-sm px-5 py-2.5 transition-colors uppercase tracking-wider"
+                {/* Language and Submit Group */}
+                <div className="flex items-center gap-3 self-end md:self-auto">
+                  {workspaceTab !== 'github' && (
+                    <select
+                      value={language}
+                      onChange={(e) => setLanguage(e.target.value)}
+                      className="bg-surface-dark border border-hairline/10 rounded-sm text-xs px-3 py-1.5 text-on-dark focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                     >
-                      Choose file
+                      <option value="python">Python</option>
+                      <option value="javascript">JavaScript</option>
+                      <option value="typescript">TypeScript</option>
+                      <option value="java">Java</option>
+                      <option value="cpp">C++</option>
+                      <option value="go">Go</option>
+                    </select>
+                  )}
+
+                  {workspaceTab !== 'github' && (
+                    <button
+                      onClick={handleReview}
+                      disabled={loading}
+                      className="bg-primary hover:bg-primary-active text-on-primary font-medium text-xs rounded-sm px-5 py-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider"
+                    >
+                      {loading ? 'Analyzing...' : 'Analyze Code'}
                     </button>
-                    {uploadFilename && (
-                      <span className="text-xs text-primary font-medium mt-4 block">
-                        Loaded: {uploadFilename}
-                      </span>
-                    )}
-                  </div>
+                  )}
                 </div>
-              )}
+              </div>
 
-              {/* Tab 3: GitHub Form */}
-              {workspaceTab === 'github' && (
-                <div className="flex-1 flex items-center justify-center p-8">
-                  <form onSubmit={handleGithubReview} className="max-w-md w-full bg-surface-dark-soft border border-hairline/10 rounded-lg p-6 space-y-5 font-sans">
-                    <h4 className="text-lg font-serif text-on-dark font-normal mb-2 text-center">
-                      Analyze GitHub Repository
-                    </h4>
-                    
-                    <div>
-                      <label className="block text-xs font-semibold text-on-dark-soft uppercase tracking-wider mb-1.5">
-                        Repository Git URL
-                      </label>
-                      <input
-                        type="url"
-                        required
-                        value={githubUrl}
-                        onChange={(e) => setGithubUrl(e.target.value)}
-                        placeholder="https://github.com/user/repo"
-                        className="w-full bg-surface-dark border border-hairline/15 text-on-dark text-xs rounded-sm px-3.5 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+              {/* Tab Workspaces */}
+              <div className="flex-1 min-h-[500px] bg-surface-dark flex flex-col">
+                
+                {/* Tab 1: Editor */}
+                {workspaceTab === 'paste' && (
+                  <div className="flex-1 h-full">
+                    <Editor
+                      height="100%"
+                      language={language}
+                      theme="vs-dark"
+                      value={code}
+                      onChange={(value) => setCode(value || '')}
+                      options={{
+                        minimap: { enabled: false },
+                        fontSize: 14,
+                        fontFamily: 'var(--font-mono), monospace',
+                        lineHeight: 22,
+                        padding: { top: 16, bottom: 16 },
+                        scrollbar: {
+                          vertical: 'visible',
+                          horizontal: 'visible',
+                        },
+                        roundedSelection: true,
+                        automaticLayout: true,
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* Tab 2: File Upload Zone */}
+                {workspaceTab === 'upload' && (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-on-dark-soft">
+                    <div className="border-2 border-dashed border-hairline/20 hover:border-primary/50 transition-colors rounded-lg p-12 max-w-md w-full flex flex-col items-center justify-center bg-surface-dark-soft/50">
+                      <span className="text-4xl mb-4 block">📁</span>
+                      <h4 className="text-base font-serif text-on-dark font-medium mb-1">Drag and drop your file</h4>
+                      <p className="text-xs text-on-dark-soft/80 mb-6 font-sans">
+                        Only UTF-8 encoded text files are supported (.py, .js, .ts, .go, .java, .cpp)
+                      </p>
+                      <input 
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileChange}
+                        className="hidden"
+                        accept=".py,.js,.jsx,.ts,.tsx,.go,.java,.cpp,.cc,.h"
                       />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
                       <button
-                        type="button"
-                        onClick={() => setGithubMode('branch')}
-                        className={`text-xs font-medium py-2 rounded-sm border transition-colors ${
-                          githubMode === 'branch'
-                            ? 'bg-primary text-on-primary border-primary'
-                            : 'bg-surface-dark text-on-dark-soft border-hairline/10 hover:text-on-dark'
-                        }`}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="bg-surface-dark-elevated hover:bg-surface-dark text-on-dark border border-hairline/15 font-medium text-xs rounded-sm px-5 py-2.5 transition-colors uppercase tracking-wider"
                       >
-                        Scan Branch
+                        Choose file
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setGithubMode('pr')}
-                        className={`text-xs font-medium py-2 rounded-sm border transition-colors ${
-                          githubMode === 'pr'
-                            ? 'bg-primary text-on-primary border-primary'
-                            : 'bg-surface-dark text-on-dark-soft border-hairline/10 hover:text-on-dark'
-                        }`}
-                      >
-                        Scan Pull Request
-                      </button>
+                      {uploadFilename && (
+                        <span className="text-xs text-primary font-medium mt-4 block">
+                          Loaded: {uploadFilename}
+                        </span>
+                      )}
                     </div>
+                  </div>
+                )}
 
-                    {githubMode === 'branch' ? (
+                {/* Tab 3: GitHub Form */}
+                {workspaceTab === 'github' && (
+                  <div className="flex-1 flex items-center justify-center p-8">
+                    <form onSubmit={handleGithubReview} className="max-w-md w-full bg-surface-dark-soft border border-hairline/10 rounded-lg p-6 space-y-5 font-sans">
+                      <h4 className="text-lg font-serif text-on-dark font-normal mb-2 text-center">
+                        Analyze GitHub Repository
+                      </h4>
+                      
                       <div>
                         <label className="block text-xs font-semibold text-on-dark-soft uppercase tracking-wider mb-1.5">
-                          Branch Name
+                          Repository Git URL
                         </label>
                         <input
-                          type="text"
-                          value={githubBranch}
-                          onChange={(e) => setGithubBranch(e.target.value)}
-                          placeholder="main"
+                          type="url"
+                          required
+                          value={githubUrl}
+                          onChange={(e) => setGithubUrl(e.target.value)}
+                          placeholder="https://github.com/user/repo"
                           className="w-full bg-surface-dark border border-hairline/15 text-on-dark text-xs rounded-sm px-3.5 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
                         />
                       </div>
-                    ) : (
-                      <div>
-                        <label className="block text-xs font-semibold text-on-dark-soft uppercase tracking-wider mb-1.5">
-                          PR Number
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          value={githubPr}
-                          onChange={(e) => setGithubPr(e.target.value)}
-                          placeholder="42"
-                          className="w-full bg-surface-dark border border-hairline/15 text-on-dark text-xs rounded-sm px-3.5 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                        />
-                      </div>
-                    )}
 
+                      <div className="grid grid-cols-2 gap-4">
+                        <button
+                          type="button"
+                          onClick={() => setGithubMode('branch')}
+                          className={`text-xs font-medium py-2 rounded-sm border transition-colors ${
+                            githubMode === 'branch'
+                              ? 'bg-primary text-on-primary border-primary'
+                              : 'bg-surface-dark text-on-dark-soft border-hairline/10 hover:text-on-dark'
+                          }`}
+                        >
+                          Scan Branch
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setGithubMode('pr')}
+                          className={`text-xs font-medium py-2 rounded-sm border transition-colors ${
+                            githubMode === 'pr'
+                              ? 'bg-primary text-on-primary border-primary'
+                              : 'bg-surface-dark text-on-dark-soft border-hairline/10 hover:text-on-dark'
+                          }`}
+                        >
+                          Scan Pull Request
+                        </button>
+                      </div>
+
+                      {githubMode === 'branch' ? (
+                        <div>
+                          <label className="block text-xs font-semibold text-on-dark-soft uppercase tracking-wider mb-1.5">
+                            Branch Name
+                          </label>
+                          <input
+                            type="text"
+                            value={githubBranch}
+                            onChange={(e) => setGithubBranch(e.target.value)}
+                            placeholder="main"
+                            className="w-full bg-surface-dark border border-hairline/15 text-on-dark text-xs rounded-sm px-3.5 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                          />
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="block text-xs font-semibold text-on-dark-soft uppercase tracking-wider mb-1.5">
+                            PR Number
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            value={githubPr}
+                            onChange={(e) => setGithubPr(e.target.value)}
+                            placeholder="42"
+                            className="w-full bg-surface-dark border border-hairline/15 text-on-dark text-xs rounded-sm px-3.5 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                          />
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full bg-primary hover:bg-primary-active text-on-primary font-medium text-xs rounded-sm py-3 transition-colors uppercase tracking-wider disabled:opacity-50"
+                      >
+                        {loading ? 'Cloning & Reviewing...' : 'Scan Repository'}
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right Panel: Showcase Results */}
+            <div className="lg:col-span-5 flex flex-col space-y-6 justify-start">
+              
+              {/* Idle Welcome Screen */}
+              {!loading && !reviewResult && !error && (
+                <div className="flex flex-col items-center justify-center text-center p-10 bg-surface-card border border-hairline rounded-lg h-full min-h-[400px]">
+                  <span className="text-5xl block mb-6">🔍</span>
+                  <h3 className="text-xl font-serif font-medium text-ink">Ready for Review</h3>
+                  <p className="text-sm text-body mt-2 max-w-xs leading-relaxed">
+                    Input your code in the workspace editor, upload a file, or target a GitHub repository, then hit analyze to execute validation.
+                  </p>
+                </div>
+              )}
+
+              {/* Spinner Loading Screen */}
+              {loading && (
+                <div className="flex flex-col items-center justify-center p-10 bg-surface-card border border-hairline rounded-lg h-full min-h-[400px]">
+                  <div className="relative w-16 h-16 mb-6">
+                    <div className="absolute top-0 left-0 w-full h-full border-4 border-primary/20 rounded-full" />
+                    <div className="absolute top-0 left-0 w-full h-full border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                  <h3 className="text-lg font-serif font-medium text-ink">Analyzing Pipeline...</h3>
+                  <p className="text-xs text-muted mt-2 text-center max-w-xs leading-relaxed font-sans">
+                    Invoking AST parsers, executing structural syntax analysis, and computing security audit thresholds...
+                  </p>
+                </div>
+              )}
+
+              {/* Failure/Error Box */}
+              {error && (
+                <div className="p-6 bg-error/5 border border-error/20 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">⚠️</span>
+                    <h3 className="text-lg font-serif font-semibold text-error">Analysis Error</h3>
+                  </div>
+                  <p className="text-sm text-body-strong mt-3 leading-relaxed">
+                    {error}
+                  </p>
+                  {workspaceTab !== 'github' && (
                     <button
-                      type="submit"
-                      disabled={loading}
-                      className="w-full bg-primary hover:bg-primary-active text-on-primary font-medium text-xs rounded-sm py-3 transition-colors uppercase tracking-wider disabled:opacity-50"
+                      onClick={handleReview}
+                      className="mt-4 text-xs font-semibold px-4 py-2 rounded-sm bg-error/10 text-error border border-error/20 hover:bg-error/15 transition-all duration-200"
                     >
-                      {loading ? 'Cloning & Reviewing...' : 'Scan Repository'}
+                      Retry Request
                     </button>
-                  </form>
+                  )}
                 </div>
               )}
             </div>
           </div>
-
-          {/* Right Panel: Showcase Results */}
-          <div className="lg:col-span-5 flex flex-col space-y-6 justify-start">
-            
-            {/* Idle Welcome Screen */}
-            {!loading && !reviewResult && !error && (
-              <div className="flex flex-col items-center justify-center text-center p-10 bg-surface-card border border-hairline rounded-lg h-full min-h-[400px]">
-                <span className="text-5xl block mb-6">🔍</span>
-                <h3 className="text-xl font-serif font-medium text-ink">Ready for Review</h3>
-                <p className="text-sm text-body mt-2 max-w-xs leading-relaxed">
-                  Input your code in the workspace editor, upload a file, or target a GitHub repository, then hit analyze to execute validation.
-                </p>
-              </div>
-            )}
-
-            {/* Spinner Loading Screen */}
-            {loading && (
-              <div className="flex flex-col items-center justify-center p-10 bg-surface-card border border-hairline rounded-lg h-full min-h-[400px]">
-                <div className="relative w-16 h-16 mb-6">
-                  <div className="absolute top-0 left-0 w-full h-full border-4 border-primary/20 rounded-full" />
-                  <div className="absolute top-0 left-0 w-full h-full border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                </div>
-                <h3 className="text-lg font-serif font-medium text-ink">Analyzing Pipeline...</h3>
-                <p className="text-xs text-muted mt-2 text-center max-w-xs leading-relaxed font-sans">
-                  Invoking AST parsers, executing structural syntax analysis, and computing security audit thresholds...
-                </p>
-              </div>
-            )}
-
-            {/* Failure/Error Box */}
-            {error && (
-              <div className="p-6 bg-error/5 border border-error/20 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <span className="text-xl">⚠️</span>
-                  <h3 className="text-lg font-serif font-semibold text-error">Analysis Error</h3>
-                </div>
-                <p className="text-sm text-body-strong mt-3 leading-relaxed">
-                  {error}
-                </p>
-                {workspaceTab !== 'github' && (
-                  <button
-                    onClick={handleReview}
-                    className="mt-4 text-xs font-semibold px-4 py-2 rounded-sm bg-error/10 text-error border border-error/20 hover:bg-error/15 transition-all duration-200"
-                  >
-                    Retry Request
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Report Display */}
-            {reviewResult && (
-              <div className="space-y-6">
-                <ScoreCard
-                  overallScore={reviewResult.overallScore !== undefined ? reviewResult.overallScore : reviewResult.score}
-                  categories={reviewResult.categoryScores || {
-                    readability: reviewResult.score,
-                    security: Math.max(reviewResult.score - 10, 50),
-                    performance: Math.min(reviewResult.score + 5, 100),
-                    maintainability: reviewResult.score,
-                    documentation: Math.max(reviewResult.score - 20, 40),
-                    bestPractices: reviewResult.score,
-                  }}
-                />
-
-                {/* AI Review Summary Editorial Card */}
-                {reviewResult.summary && (
-                  <AIReviewSummary summary={reviewResult.summary} />
-                )}
-
-                {/* Severity Breakdown Visualizer */}
-                {reviewResult.severityCounts && (
-                  <SeverityBreakdown counts={reviewResult.severityCounts} />
-                )}
-
-                {/* CodeBERT Neural Fingerprint */}
-                {reviewResult.embedding && reviewResult.embedding.length > 0 && (
-                  <NeuralFingerprint embedding={reviewResult.embedding} />
-                )}
-
-                {/* Line Complexity Gutter heat map */}
-                {reviewResult.surprise_scores && reviewResult.surprise_scores.length > 0 && (
-                  <ComplexityProfiler 
-                    surpriseScores={reviewResult.surprise_scores} 
-                    code={code}
-                  />
-                )}
-                
-                <ReviewCard issues={reviewResult.issues} />
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </main>
 
       {/* Styled Brand Footer */}
