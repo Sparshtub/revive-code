@@ -33,11 +33,13 @@ async def connect_github(request: ConnectRequest, current_user: dict = Depends(g
             )
             
         # 3. Update database record for current logged-in user
+        from app.services.encryption import encrypt_token
+        encrypted_token = encrypt_token(access_token)
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE users SET github_username = ?, github_access_token = ? WHERE id = ?;",
-            (username, access_token, current_user["id"])
+            (username, encrypted_token, current_user["id"])
         )
         conn.commit()
         conn.close()

@@ -4,6 +4,7 @@ import subprocess
 import json
 import re
 import uuid
+import shutil
 from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
 from typing import List, Dict, Any
@@ -217,20 +218,40 @@ def run_regex_checks(code: str) -> List[Dict[str, Any]]:
         
     return issues
 
+def find_executable(name: str) -> str | None:
+    # 1. Search in PATH (e.g. global installation in Docker)
+    system_path = shutil.which(name)
+    if system_path:
+        return system_path
+        
+    # 2. Search in local virtualenv (Windows & Linux layouts)
+    for venv_dir in (".venv", "backend/.venv"):
+        # Windows venv scripts layout
+        windows_path = os.path.join(backend_dir, venv_dir, "Scripts", f"{name}.exe")
+        if os.path.exists(windows_path):
+            return windows_path
+            
+        # Linux/macOS venv bin layout
+        linux_path = os.path.join(backend_dir, venv_dir, "bin", name)
+        if os.path.exists(linux_path):
+            return linux_path
+            
+    return None
+
 def analyze_python_cli(file_path: str) -> Dict[str, Any]:
     issues = []
     mi_score = 100
     
-    # Executable paths
-    ruff_path = os.path.join(backend_dir, ".venv", "Scripts", "ruff.exe")
-    bandit_path = os.path.join(backend_dir, ".venv", "Scripts", "bandit.exe")
-    radon_path = os.path.join(backend_dir, ".venv", "Scripts", "radon.exe")
+    # Dynamic executable paths resolution
+    ruff_path = find_executable("ruff")
+    bandit_path = find_executable("bandit")
+    radon_path = find_executable("radon")
     
     # 1. Ruff Linting
-    if os.path.exists(ruff_path):
+    if ruff_path:
         res = subprocess.run(
             [ruff_path, "check", "--output-format", "json", file_path],
-            capture_output=True, text=True, shell=True
+            capture_output=True, text=True
         )
         try:
             ruff_data = json.loads(res.stdout)
@@ -253,10 +274,10 @@ def analyze_python_cli(file_path: str) -> Dict[str, Any]:
             pass
             
     # 2. Bandit Security Lint
-    if os.path.exists(bandit_path):
+    if bandit_path:
         res = subprocess.run(
             [bandit_path, "-f", "json", file_path],
-            capture_output=True, text=True, shell=True
+            capture_output=True, text=True
         )
         try:
             bandit_data = json.loads(res.stdout)
@@ -277,10 +298,10 @@ def analyze_python_cli(file_path: str) -> Dict[str, Any]:
             pass
             
     # 3. Radon Maintainability Index (MI) & Complexity (CC)
-    if os.path.exists(radon_path):
+    if radon_path:
         res = subprocess.run(
             [radon_path, "mi", "-j", file_path],
-            capture_output=True, text=True, shell=True
+            capture_output=True, text=True
         )
         try:
             mi_data = json.loads(res.stdout)
@@ -292,7 +313,7 @@ def analyze_python_cli(file_path: str) -> Dict[str, Any]:
             
         res = subprocess.run(
             [radon_path, "cc", "-j", file_path],
-            capture_output=True, text=True, shell=True
+            capture_output=True, text=True
         )
         try:
             cc_data = json.loads(res.stdout)

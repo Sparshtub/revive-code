@@ -1,11 +1,8 @@
 {
   "scripts": {
     "dev:frontend": "npm run dev --prefix frontend",
-    "dev:backend": "cd backend && .venv\\Scripts\\python -m uvicorn app.main:app --reload --reload-dir app --port 8000",
+    "dev:backend": "node -e \"const exe = process.platform === 'win32' ? '.venv\\\\Scripts\\\\python.exe' : '.venv/bin/python'; require('child_process').spawn(exe, ['-m', 'uvicorn', 'app.main:app', '--reload', '--reload-dir', 'app', '--port', '8000'], { stdio: 'inherit', shell: true, cwd: 'backend' })\"",
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\""
-  },
-  "dependencies": {
-    "mcp-postgres-server": "^0.1.3"
   },
   "devDependencies": {
     "concurrently": "^10.0.3"

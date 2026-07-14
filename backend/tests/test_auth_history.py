@@ -27,7 +27,7 @@ def clean_db():
 
 def test_user_signup_and_login():
     # 1. Successful Signup
-    signup_data = {"email": "test@example.com", "password": "supersecretpassword"}
+    signup_data = {"email": "test@example.com", "password": "supersecretpassword1"}
     response = client.post("/api/v1/auth/signup", json=signup_data)
     assert response.status_code == 200
     assert response.json()["status"] == "success"
@@ -37,7 +37,7 @@ def test_user_signup_and_login():
     short_pw_data = {"email": "test2@example.com", "password": "123"}
     response = client.post("/api/v1/auth/signup", json=short_pw_data)
     assert response.status_code == 400
-    assert "Password must be at least 6 characters" in response.json()["detail"]
+    assert "Password must be at least 8 characters" in response.json()["detail"]
 
     # 3. Signup Validation: Duplicate Email
     response = client.post("/api/v1/auth/signup", json=signup_data)
@@ -52,7 +52,7 @@ def test_user_signup_and_login():
     token = login_response.json()["token"]
 
     # 5. Failed Login: Incorrect Password
-    wrong_pw_data = {"email": "test@example.com", "password": "wrongpassword"}
+    wrong_pw_data = {"email": "test@example.com", "password": "wrongpassword1"}
     response = client.post("/api/v1/auth/login", json=wrong_pw_data)
     assert response.status_code == 401
     assert "Incorrect email or password" in response.json()["detail"]

@@ -24,7 +24,10 @@ def get_user_github_token(current_user: dict) -> str:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="GitHub account not connected. Please connect your GitHub account first."
         )
-    return row["github_access_token"]
+        
+    from app.services.encryption import decrypt_token
+    decrypted_token = decrypt_token(row["github_access_token"])
+    return decrypted_token
 
 @router.get("/github/repositories")
 async def list_repositories(current_user: dict = Depends(get_current_user)):

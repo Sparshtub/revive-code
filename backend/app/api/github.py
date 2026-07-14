@@ -77,16 +77,16 @@ def clone_and_checkout(repo_url: str, dest_dir: str, branch: str = None, pr_numb
             clone_cmd.extend(["-b", branch])
         clone_cmd.extend([repo_url, dest_dir])
         
-        res = subprocess.run(clone_cmd, capture_output=True, text=True, shell=True)
+        res = subprocess.run(clone_cmd, capture_output=True, text=True)
         if res.returncode != 0:
             raise Exception(res.stderr or "Failed to clone repository")
             
         # If reviewing a PR, fetch the PR head and check it out
         if pr_number:
             fetch_cmd = ["git", "fetch", "origin", f"pull/{pr_number}/head:pr_branch"]
-            subprocess.run(fetch_cmd, cwd=dest_dir, capture_output=True, shell=True)
+            subprocess.run(fetch_cmd, cwd=dest_dir, capture_output=True)
             checkout_cmd = ["git", "checkout", "pr_branch"]
-            subprocess.run(checkout_cmd, cwd=dest_dir, capture_output=True, shell=True)
+            subprocess.run(checkout_cmd, cwd=dest_dir, capture_output=True)
             
     except Exception as e:
         raise HTTPException(

@@ -57,24 +57,24 @@ def clone_and_checkout(repo_url: str, dest_dir: str, branch: str = None, pr_numb
             clone_cmd.extend(["-b", branch])
         clone_cmd.extend([auth_url, dest_dir])
         
-        res = subprocess.run(clone_cmd, capture_output=True, text=True, shell=True)
+        res = subprocess.run(clone_cmd, capture_output=True, text=True)
         if res.returncode != 0:
             # Try cloning without branch first, then checkout branch
             clone_cmd_fallback = ["git", "clone", "--depth", "1", auth_url, dest_dir]
-            res_fallback = subprocess.run(clone_cmd_fallback, capture_output=True, text=True, shell=True)
+            res_fallback = subprocess.run(clone_cmd_fallback, capture_output=True, text=True)
             if res_fallback.returncode != 0:
                 raise Exception(res_fallback.stderr or "Failed to clone repository")
                 
             if branch:
                 checkout_cmd = ["git", "checkout", branch]
-                subprocess.run(checkout_cmd, cwd=dest_dir, capture_output=True, shell=True)
+                subprocess.run(checkout_cmd, cwd=dest_dir, capture_output=True)
         
         # If reviewing a PR, fetch the PR head and check it out
         if pr_number:
             fetch_cmd = ["git", "fetch", "origin", f"pull/{pr_number}/head:pr_branch"]
-            subprocess.run(fetch_cmd, cwd=dest_dir, capture_output=True, shell=True)
+            subprocess.run(fetch_cmd, cwd=dest_dir, capture_output=True)
             checkout_cmd = ["git", "checkout", "pr_branch"]
-            subprocess.run(checkout_cmd, cwd=dest_dir, capture_output=True, shell=True)
+            subprocess.run(checkout_cmd, cwd=dest_dir, capture_output=True)
             
     except Exception as e:
         raise Exception(f"Git clone operation failed: {str(e)}")
@@ -328,7 +328,7 @@ def review_repository(repo_url: str, branch: str, user_id: int = None, token: st
         # Get head commit hash
         commit_hash = "unknown"
         try:
-            commit_res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=temp_checkout_dir, capture_output=True, text=True, shell=True)
+            commit_res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=temp_checkout_dir, capture_output=True, text=True)
             if commit_res.returncode == 0:
                 commit_hash = commit_res.stdout.strip()
         except Exception:
@@ -395,7 +395,7 @@ def review_pull_request(repo_url: str, pr_number: int, user_id: int = None, toke
         
         commit_hash = "unknown"
         try:
-            commit_res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=temp_checkout_dir, capture_output=True, text=True, shell=True)
+            commit_res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=temp_checkout_dir, capture_output=True, text=True)
             if commit_res.returncode == 0:
                 commit_hash = commit_res.stdout.strip()
         except Exception:

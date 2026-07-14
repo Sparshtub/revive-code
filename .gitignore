@@ -20,3 +20,13 @@
 /frontend/.env*
 /backend/.env*
 /frontend/.vercel
+
+# SQLite database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Model caches
+.cache/
+.huggingface/
+.pytest_cache/
