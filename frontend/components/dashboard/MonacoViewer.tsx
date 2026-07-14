@@ -86,6 +86,7 @@ export default function MonacoViewer({ code, language, issues, scrollToLineTrigg
           onMount={handleEditorDidMount}
           options={{
             readOnly: true,
+            domReadOnly: true,
             minimap: { enabled: false },
             fontSize: 13,
             fontFamily: 'var(--font-mono), monospace',
@@ -97,6 +98,7 @@ export default function MonacoViewer({ code, language, issues, scrollToLineTrigg
             },
             roundedSelection: true,
             automaticLayout: true,
+            contextmenu: false,
           }}
         />
       </div>

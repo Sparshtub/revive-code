@@ -776,6 +776,7 @@ export default function Home() {
                         },
                         roundedSelection: true,
                         automaticLayout: true,
+                        contextmenu: false,
                       }}
                     />
                   </div>

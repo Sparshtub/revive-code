@@ -11,6 +11,7 @@ from app.db import get_db_connection
 from app.api.dependencies import get_optional_current_user
 from app.api.review import perform_raw_analysis, SANDBOX_DIR
 from app.services import scoring_service, summary_service
+from app.services.repository_review import clone_and_checkout
 
 router = APIRouter()
 
@@ -65,34 +66,7 @@ def rmtree_onerror(func, path, excinfo):
     os.chmod(path, stat.S_IWRITE)
     func(path)
 
-def clone_and_checkout(repo_url: str, dest_dir: str, branch: str = None, pr_number: int = None):
-    """
-    Clones the repository and checks out the specific branch or pull request.
-    Uses git shallow clone to save bandwidth and speed up analysis.
-    """
-    try:
-        # Standard clone command
-        clone_cmd = ["git", "clone", "--depth", "1"]
-        if branch and not pr_number:
-            clone_cmd.extend(["-b", branch])
-        clone_cmd.extend([repo_url, dest_dir])
-        
-        res = subprocess.run(clone_cmd, capture_output=True, text=True)
-        if res.returncode != 0:
-            raise Exception(res.stderr or "Failed to clone repository")
-            
-        # If reviewing a PR, fetch the PR head and check it out
-        if pr_number:
-            fetch_cmd = ["git", "fetch", "origin", f"pull/{pr_number}/head:pr_branch"]
-            subprocess.run(fetch_cmd, cwd=dest_dir, capture_output=True)
-            checkout_cmd = ["git", "checkout", "pr_branch"]
-            subprocess.run(checkout_cmd, cwd=dest_dir, capture_output=True)
-            
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Git operation failed: {str(e)}"
-        )
+# clone_and_checkout imported from app.services.repository_review
 
 def scan_repository_files(repo_path: str) -> List[Dict[str, str]]:
     """
@@ -210,7 +184,13 @@ async def review_repository(request: RepoReviewRequest, current_user: dict = Dep
     temp_checkout_dir = os.path.join(SANDBOX_DIR, session_id)
     
     try:
-        clone_and_checkout(repo_url, temp_checkout_dir, branch=branch)
+        try:
+            clone_and_checkout(repo_url, temp_checkout_dir, branch=branch)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Git operation failed: {str(e)}"
+            )
         files = scan_repository_files(temp_checkout_dir)
         
         if not files:
@@ -285,7 +265,13 @@ async def review_pr(request: PRReviewRequest, current_user: dict = Depends(get_o
     temp_checkout_dir = os.path.join(SANDBOX_DIR, session_id)
     
     try:
-        clone_and_checkout(repo_url, temp_checkout_dir, pr_number=pr_number)
+        try:
+            clone_and_checkout(repo_url, temp_checkout_dir, pr_number=pr_number)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Git operation failed: {str(e)}"
+            )
         files = scan_repository_files(temp_checkout_dir)
         
         if not files:

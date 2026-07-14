@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import shutil
 import stat
@@ -47,8 +48,25 @@ def rewrite_repo_url(repo_url: str, token: str = None) -> str:
         return repo_url.replace("https://github.com/", f"https://x-access-token:{token}@github.com/")
     return repo_url
 
+def validate_github_url(repo_url: str) -> None:
+    """
+    Validates that a GitHub repository URL is correct and secure.
+    Allows standard HTTPS GitHub URLs and prevents SSRF/command option injection.
+    """
+    if not repo_url:
+        raise ValueError("Repository URL is empty")
+    
+    # Restrict to HTTPS github.com URLs with letters, digits, dots, hyphens and underscores for owner/repo
+    pattern = r"^https://github\.com/[\w.-]+/[\w.-]+(\.git)?/?$"
+    if not re.match(pattern, repo_url):
+        raise ValueError(
+            "Invalid GitHub repository URL. Must be a valid HTTPS URL matching "
+            "https://github.com/owner/repository."
+        )
+
 def clone_and_checkout(repo_url: str, dest_dir: str, branch: str = None, pr_number: int = None, token: str = None):
     """Clones repository using optional access token, and checks out specified branch or PR."""
+    validate_github_url(repo_url)
     auth_url = rewrite_repo_url(repo_url, token)
     try:
         # Standard clone command
@@ -303,6 +321,7 @@ def save_repository_review(review_id: str, user_id: int, label: str, language: s
 
 def review_repository(repo_url: str, branch: str, user_id: int = None, token: str = None) -> Dict[str, Any]:
     """Clones, scans, reviews and persists a GitHub repository."""
+    validate_github_url(repo_url)
     review_id = str(uuid.uuid4())
     label = f"GitHub Repository: {repo_url}\nBranch: {branch}"
     
@@ -356,6 +375,7 @@ def review_repository(repo_url: str, branch: str, user_id: int = None, token: st
 
 def review_pull_request(repo_url: str, pr_number: int, user_id: int = None, token: str = None) -> Dict[str, Any]:
     """Clones a repository, checks out PR, parses modified file lists, reviews only modified files, and persists."""
+    validate_github_url(repo_url)
     review_id = str(uuid.uuid4())
     label = f"GitHub Pull Request: {repo_url} (PR #{pr_number})"
     

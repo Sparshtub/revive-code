@@ -123,3 +123,71 @@ def test_github_history():
     assert "history" in data
     assert len(data["history"]) == 1
     assert "revive-code" in data["history"][0]["code"]
+
+
+def test_github_url_validation():
+    from app.services.repository_review import validate_github_url
+    
+    # Valid URLs
+    validate_github_url("https://github.com/owner/repo")
+    validate_github_url("https://github.com/owner/repo.git")
+    validate_github_url("https://github.com/owner/repo/")
+    validate_github_url("https://github.com/owner-name/repo.name")
+    
+    # Invalid URLs
+    with pytest.raises(ValueError, match="Invalid GitHub repository URL"):
+        validate_github_url("https://github.com/owner")  # missing repo
+    with pytest.raises(ValueError, match="Invalid GitHub repository URL"):
+        validate_github_url("http://github.com/owner/repo")  # HTTP not allowed
+    with pytest.raises(ValueError, match="Invalid GitHub repository URL"):
+        validate_github_url("--upload-pack=blah")  # option injection
+    with pytest.raises(ValueError, match="Invalid GitHub repository URL"):
+        validate_github_url("https://github.com/owner/repo/subfolder")  # subfolder not allowed
+    with pytest.raises(ValueError, match="Invalid GitHub repository URL"):
+        validate_github_url("https://malicious.com/owner/repo")  # wrong host
+
+
+def test_token_encryption_and_legacy_fallback():
+    from app.services.encryption import encrypt_token, decrypt_token, SECRET_KEY
+    import base64
+    
+    token = "ghp_1234567890abcdef"
+    
+    # 1. Test normal encrypt and decrypt (Fernet)
+    encrypted = encrypt_token(token)
+    assert encrypted != token
+    assert decrypt_token(encrypted) == token
+    
+    # 2. Test legacy XOR decryption fallback
+    # Manually encrypt using legacy XOR cipher
+    key_bytes = SECRET_KEY.encode('utf-8')
+    token_bytes = token.encode('utf-8')
+    legacy_encrypted = bytearray(len(token_bytes))
+    for i in range(len(token_bytes)):
+        legacy_encrypted[i] = token_bytes[i] ^ key_bytes[i % len(key_bytes)]
+    legacy_b64 = base64.b64encode(legacy_encrypted).decode('utf-8')
+    
+    # Decrypt should fallback and work
+    assert decrypt_token(legacy_b64) == token
+
+
+def test_api_github_review_invalid_url():
+    headers = get_auth_headers()
+    # Connect account first
+    client.post("/api/v1/github/connect", json={"code": "mock_test_code"}, headers=headers)
+    
+    # Request with invalid URL
+    review_payload = {
+        "repository_url": "https://malicious-domain.com/owner/repo",
+        "branch": "master"
+    }
+    # Hits `/api/v1/github/review`
+    res = client.post("/api/v1/github/review", json=review_payload, headers=headers)
+    assert res.status_code == 500
+    assert "Invalid GitHub repository URL" in res.json()["detail"]
+    
+    # Hits `/api/v1/github/repository` (anonymous / optional user)
+    res_anon = client.post("/api/v1/github/repository", json=review_payload, headers=headers)
+    assert res_anon.status_code == 400
+    assert "Invalid GitHub repository URL" in res_anon.json()["detail"]
+
