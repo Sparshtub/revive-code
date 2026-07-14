@@ -17,6 +17,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def startup_event():
+    from app.db import init_db
+    init_db()
+
 @app.get("/health")
 async def health_check():
     return {

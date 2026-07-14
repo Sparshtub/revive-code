@@ -13,5 +13,5 @@ async def upload_file(file: UploadFile = File(...)):
     return {
         "filename": file.filename,
         "status": "success",
-        "code_snippet_preview": code_str[:200]
+        "code": code_str
     }

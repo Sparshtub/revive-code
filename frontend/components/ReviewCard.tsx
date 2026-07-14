@@ -6,6 +6,7 @@ export interface Issue {
   title: string;
   description: string;
   suggestion?: string;
+  file?: string;
 }
 
 interface ReviewCardProps {
@@ -72,6 +73,11 @@ export default function ReviewCard({ issues }: ReviewCardProps) {
                   <h4 className="text-lg font-serif font-semibold text-ink">{issue.title}</h4>
                 </div>
                 <div className="flex items-center gap-2 self-start sm:self-auto">
+                  {issue.file && (
+                    <span className="text-xs px-2.5 py-1 rounded-sm bg-surface-card border border-hairline text-body font-mono max-w-[180px] truncate" title={issue.file}>
+                      {issue.file}
+                    </span>
+                  )}
                   {issue.line !== undefined && (
                     <span className="text-xs px-2.5 py-1 rounded-sm bg-surface-card border border-hairline text-body font-mono">
                       Line {issue.line}

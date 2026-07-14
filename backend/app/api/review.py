@@ -3,10 +3,13 @@ import tempfile
 import subprocess
 import json
 import re
-from fastapi import APIRouter, HTTPException
+import uuid
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Dict, Any
 from tree_sitter_languages import get_language, get_parser
+from app.db import get_db_connection
+from app.api.dependencies import get_optional_current_user
 
 router = APIRouter()
 
@@ -307,39 +310,43 @@ def analyze_python_cli(file_path: str) -> Dict[str, Any]:
             
     return {"issues": issues, "maintainability_score": mi_score}
 
-@router.post("/review")
-async def review_code(request: ReviewRequest):
-    if not request.code.strip():
-        raise HTTPException(status_code=400, detail="Code content cannot be empty")
-        
+def perform_raw_analysis(code: str, language: str, file_path_on_disk: str = None) -> Dict[str, Any]:
     aggregated_issues = []
     
     # 1. Base regex metrics
-    aggregated_issues.extend(run_regex_checks(request.code))
+    aggregated_issues.extend(run_regex_checks(code))
     
     # 2. AST parsing queries
-    aggregated_issues.extend(analyze_ast(request.code, request.language))
+    aggregated_issues.extend(analyze_ast(code, language))
     
     # 3. Run Python specific engines if selected
     base_score = 95
-    if request.language.lower() == "python":
-        suffix = ".py"
-        try:
-            with tempfile.NamedTemporaryFile(dir=SANDBOX_DIR, suffix=suffix, delete=False, mode="w", encoding="utf-8") as temp_file:
-                temp_file.write(request.code)
-                temp_file_path = temp_file.name
-                
-            python_results = analyze_python_cli(temp_file_path)
-            aggregated_issues.extend(python_results["issues"])
-            base_score = python_results["maintainability_score"]
-        except Exception:
-            pass
-        finally:
-            if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
-                try:
-                    os.remove(temp_file_path)
-                except Exception:
-                    pass
+    if language.lower() == "python":
+        if file_path_on_disk and os.path.exists(file_path_on_disk):
+            try:
+                python_results = analyze_python_cli(file_path_on_disk)
+                aggregated_issues.extend(python_results["issues"])
+                base_score = python_results["maintainability_score"]
+            except Exception:
+                pass
+        else:
+            suffix = ".py"
+            try:
+                with tempfile.NamedTemporaryFile(dir=SANDBOX_DIR, suffix=suffix, delete=False, mode="w", encoding="utf-8") as temp_file:
+                    temp_file.write(code)
+                    temp_file_path = temp_file.name
+                    
+                python_results = analyze_python_cli(temp_file_path)
+                aggregated_issues.extend(python_results["issues"])
+                base_score = python_results["maintainability_score"]
+            except Exception:
+                pass
+            finally:
+                if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+                    try:
+                        os.remove(temp_file_path)
+                    except Exception:
+                        pass
 
     # Deduct overall scores based on severity metrics
     deductions = {
@@ -367,18 +374,37 @@ async def review_code(request: ReviewRequest):
             
     # Sort issues by line number
     unique_issues.sort(key=lambda x: x.get("line", 0))
+    
+    return {"score": score, "issues": unique_issues}
+
+@router.post("/review")
+async def review_code(request: ReviewRequest, current_user: dict = Depends(get_optional_current_user)):
+    if not request.code.strip():
+        raise HTTPException(status_code=400, detail="Code content cannot be empty")
+        
+    res = perform_raw_analysis(request.code, request.language)
+    score = res["score"]
+    unique_issues = res["issues"]
+
+    review_id = str(uuid.uuid4())
+    if current_user:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "INSERT INTO reviews (id, user_id, code, language, score, issues) VALUES (?, ?, ?, ?, ?, ?);",
+                (review_id, current_user["id"], request.code, request.language, score, json.dumps(unique_issues))
+            )
+            conn.commit()
+        except Exception as e:
+            conn.close()
+            raise HTTPException(status_code=500, detail=f"Database error saving review: {str(e)}")
+        conn.close()
 
     return {
+        "id": review_id,
         "status": "success",
         "message": "Review completed successfully",
         "score": score,
         "issues": unique_issues
-    }
-
-@router.get("/review/{id}")
-async def get_review(id: str):
-    return {
-        "id": id,
-        "score": 90,
-        "issues": []
     }

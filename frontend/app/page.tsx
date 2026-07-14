@@ -1,18 +1,31 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import ScoreCard from '@/components/ScoreCard';
 import ReviewCard, { Issue } from '@/components/ReviewCard';
+import AuthModal from '@/components/AuthModal';
+import { useAuth } from '@/components/AuthContext';
 
 interface ReviewResponse {
+  id?: string;
   status: string;
   message: string;
   score: number;
   issues: Issue[];
 }
 
+interface HistoryItem {
+  id: string;
+  language: string;
+  score: number;
+  created_at: string;
+}
+
 export default function Home() {
+  const { user, token, isAuthenticated, logout } = useAuth();
+  
+  // Workspace States
   const [code, setCode] = useState<string>(`def calculate_average(numbers):
     # TODO: add implementation
     total = 0
@@ -24,10 +37,28 @@ export default function Home() {
     
     return total / len(numbers)`);
   const [language, setLanguage] = useState<string>('python');
+  const [workspaceTab, setWorkspaceTab] = useState<'paste' | 'upload' | 'github'>('paste');
+  const [uploadFilename, setUploadFilename] = useState<string | null>(null);
+  
+  // GitHub Integration States
+  const [githubUrl, setGithubUrl] = useState<string>('');
+  const [githubMode, setGithubMode] = useState<'branch' | 'pr'>('branch');
+  const [githubBranch, setGithubBranch] = useState<string>('main');
+  const [githubPr, setGithubPr] = useState<string>('');
+  
+  // API and Modal States
   const [apiHealth, setApiHealth] = useState<'checking' | 'connected' | 'disconnected'>('checking');
   const [reviewResult, setReviewResult] = useState<ReviewResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  
+  // History Drawer States
+  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
+  const [historyList, setHistoryList] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState<boolean>(false);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Check API health status on mount
   useEffect(() => {
@@ -39,17 +70,49 @@ export default function Home() {
       .catch(() => setApiHealth('disconnected'));
   }, []);
 
+  // Fetch History whenever auth state changes or history drawer opens
+  useEffect(() => {
+    if (isAuthenticated && token && isHistoryOpen) {
+      fetchHistory();
+    }
+  }, [isAuthenticated, token, isHistoryOpen]);
+
+  const fetchHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/v1/history', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setHistoryList(data.history || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch history:", err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  // Perform standard single-file code review
   const handleReview = async () => {
     setLoading(true);
     setError(null);
     setReviewResult(null);
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch('http://127.0.0.1:8000/api/v1/review', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ code, language }),
       });
 
@@ -59,6 +122,11 @@ export default function Home() {
 
       const data = await response.json();
       setReviewResult(data);
+      
+      // Refresh history list if logged in
+      if (isAuthenticated) {
+        fetchHistory();
+      }
     } catch (err: any) {
       setError(err.message || 'An error occurred while reviewing the code.');
     } finally {
@@ -66,12 +134,170 @@ export default function Home() {
     }
   };
 
+  // Perform GitHub repository / PR review
+  const handleGithubReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!githubUrl.trim()) return;
+
+    setLoading(true);
+    setError(null);
+    setReviewResult(null);
+
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      let endpoint = '/github/repository';
+      let payload: Record<string, any> = { repository_url: githubUrl.trim() };
+
+      if (githubMode === 'pr') {
+        endpoint = '/github/pr';
+        const prNum = parseInt(githubPr);
+        if (isNaN(prNum)) {
+          throw new Error("Please enter a valid PR number.");
+        }
+        payload.pr_number = prNum;
+      } else {
+        payload.branch = githubBranch.trim() || 'main';
+      }
+
+      const response = await fetch(`http://127.0.0.1:8000/api/v1${endpoint}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || 'GitHub review execution failed.');
+      }
+
+      setReviewResult(data);
+
+      if (isAuthenticated) {
+        fetchHistory();
+      }
+    } catch (err: any) {
+      setError(err.message || 'An error occurred during GitHub repository analysis.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load code and review details from a saved history item
+  const handleLoadHistoryItem = async (historyId: string) => {
+    setLoading(true);
+    setError(null);
+    setReviewResult(null);
+    setIsHistoryOpen(false); // close drawer
+
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/api/v1/review/${historyId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to load historical review report.");
+      }
+
+      const data = await response.json();
+      
+      // Restore workspace state
+      if (data.language !== 'multiple') {
+        setCode(data.code);
+        setLanguage(data.language);
+        setWorkspaceTab('paste');
+      } else {
+        // Multi-file repository overview
+        setCode(`// Repository analysis: ${data.code}\n// Language: Multiple\n// Issues: ${data.issues.length}`);
+        setLanguage('javascript');
+        setWorkspaceTab('github');
+      }
+      
+      setReviewResult(data);
+    } catch (err: any) {
+      setError(err.message || 'Error occurred loading the review.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Delete history item
+  const handleDeleteHistoryItem = async (e: React.MouseEvent, historyId: string) => {
+    e.stopPropagation(); // prevent loading item click
+    if (!confirm("Are you sure you want to delete this review?")) return;
+
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/api/v1/review/${historyId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        setHistoryList(prev => prev.filter(item => item.id !== historyId));
+        // Reset review display if the deleted report was active
+        if (reviewResult && reviewResult.id === historyId) {
+          setReviewResult(null);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to delete history item:", err);
+    }
+  };
+
+  // Process uploaded source file
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadFilename(file.name);
+    
+    // Auto-detect language
+    const dotIdx = file.name.lastIndexOf('.');
+    if (dotIdx !== -1) {
+      const ext = file.name.slice(dotIdx).toLowerCase();
+      const extMap: Record<string, string> = {
+        '.py': 'python',
+        '.js': 'javascript',
+        '.jsx': 'javascript',
+        '.ts': 'typescript',
+        '.tsx': 'typescript',
+        '.go': 'go',
+        '.java': 'java',
+        '.cpp': 'cpp',
+        '.cc': 'cpp',
+        '.cxx': 'cpp',
+        '.h': 'cpp',
+        '.hpp': 'cpp'
+      };
+      if (extMap[ext]) {
+        setLanguage(extMap[ext]);
+      }
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setCode(event.target.result as string);
+        setWorkspaceTab('paste'); // redirect to editor to preview
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-canvas font-sans text-body selection:bg-primary/20">
-      {/* Top Nav Component */}
-      <header className="h-16 bg-canvas border-b border-hairline sticky top-0 z-50 px-6 sm:px-12 flex items-center justify-between">
+      
+      {/* Top Navigation */}
+      <header className="h-16 bg-canvas border-b border-hairline sticky top-0 z-40 px-6 sm:px-12 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {/* Anthropic style radial-spike-mark prefix */}
           <div className="text-primary flex items-center justify-center">
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M12 2v20M2 12h20M5 5l14 14M5 19L19 5" />
@@ -87,114 +313,316 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Action Controls & Health Status */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-xs font-sans">
-            <span className="font-semibold text-muted">API Status:</span>
+        {/* User Session & Status */}
+        <div className="flex items-center gap-6">
+          <div className="hidden md:flex items-center gap-2 text-xs font-sans">
+            <span className="font-semibold text-muted">API:</span>
             {apiHealth === 'checking' && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-pill text-xs font-medium bg-surface-card text-muted border border-hairline animate-pulse">
-                <span className="w-1.5 h-1.5 rounded-full bg-muted" />
-                Checking
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-card text-muted border border-hairline animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-muted" /> Checking
               </span>
             )}
             {apiHealth === 'connected' && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-pill text-xs font-medium bg-success/10 text-success border border-success/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                Online
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/10 text-success border border-success/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" /> Online
               </span>
             )}
             {apiHealth === 'disconnected' && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-pill text-xs font-medium bg-error/10 text-error border border-error/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-error" />
-                Offline
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-error/10 text-error border border-error/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-error" /> Offline
               </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            {isAuthenticated ? (
+              <>
+                <button
+                  onClick={() => setIsHistoryOpen(true)}
+                  className="text-xs font-medium text-ink hover:underline cursor-pointer py-1.5 px-3 rounded-md hover:bg-surface-card transition-colors"
+                >
+                  History
+                </button>
+                <div className="h-4 w-px bg-hairline hidden sm:block" />
+                <span className="text-xs font-mono text-muted hidden sm:inline-block max-w-[150px] truncate" title={user?.email}>
+                  {user?.email}
+                </span>
+                <button
+                  onClick={logout}
+                  className="text-xs font-medium text-primary hover:text-primary-active py-1.5 px-3 rounded-md hover:bg-surface-card transition-colors"
+                >
+                  Sign Out
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="text-xs font-medium text-ink hover:underline py-1.5 px-3"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => setIsAuthModalOpen(true)}
+                  className="bg-primary hover:bg-primary-active text-on-primary font-medium text-xs rounded-md px-4 py-2 transition-colors uppercase tracking-wider"
+                >
+                  Get History
+                </button>
+              </>
             )}
           </div>
         </div>
       </header>
 
-      {/* Hero Section */}
+      {/* Hero Header */}
       <section className="bg-canvas border-b border-hairline py-12 px-6 sm:px-12 max-w-6xl mx-auto w-full">
         <div className="max-w-3xl">
           <h2 className="text-4xl sm:text-5xl font-serif font-normal text-ink leading-tight mb-4 tracking-tight">
             Meet your code thinking partner.
           </h2>
-          <p className="text-lg text-body-strong font-sans leading-relaxed mb-6 max-w-2xl">
+          <p className="text-lg text-body-strong font-sans leading-relaxed max-w-2xl">
             Analyze codebases instantly for security vulnerabilities, cyclomatic complexity, and stylistic violations using modern static linters and deep AST verification.
           </p>
         </div>
       </section>
 
-      {/* Main Workspace */}
+      {/* Main Workspace Layout */}
       <main className="flex-1 bg-surface-soft border-b border-hairline py-12 px-6 sm:px-12">
         <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Left Side: Product Editor mockup card */}
+          
+          {/* Left Panel: Code Workspace / GitHub Controls */}
           <div className="lg:col-span-7 flex flex-col bg-surface-dark border border-hairline/10 rounded-lg overflow-hidden shadow-sm">
-            {/* Mockup Header control bar */}
-            <div className="bg-surface-dark-elevated border-b border-hairline/5 px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <span className="text-xs font-sans font-semibold text-on-dark-soft uppercase tracking-wider">Editor Chrome</span>
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  className="bg-surface-dark border border-hairline/10 rounded-sm text-xs px-3 py-1.5 text-on-dark focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+            
+            {/* Workspace Controls Header */}
+            <div className="bg-surface-dark-elevated border-b border-hairline/5 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              
+              {/* Tab Selector */}
+              <div className="flex bg-surface-dark p-1 rounded-md border border-hairline/5">
+                <button
+                  onClick={() => setWorkspaceTab('paste')}
+                  className={`text-xs font-sans px-3.5 py-1.5 rounded-sm transition-colors font-medium ${
+                    workspaceTab === 'paste' 
+                      ? 'bg-surface-dark-elevated text-on-dark font-semibold' 
+                      : 'text-on-dark-soft hover:text-on-dark'
+                  }`}
                 >
-                  <option value="python">Python</option>
-                  <option value="javascript">JavaScript</option>
-                  <option value="typescript">TypeScript</option>
-                  <option value="java">Java</option>
-                  <option value="cpp">C++</option>
-                  <option value="go">Go</option>
-                </select>
+                  Paste Code
+                </button>
+                <button
+                  onClick={() => setWorkspaceTab('upload')}
+                  className={`text-xs font-sans px-3.5 py-1.5 rounded-sm transition-colors font-medium ${
+                    workspaceTab === 'upload' 
+                      ? 'bg-surface-dark-elevated text-on-dark font-semibold' 
+                      : 'text-on-dark-soft hover:text-on-dark'
+                  }`}
+                >
+                  Upload File
+                </button>
+                <button
+                  onClick={() => setWorkspaceTab('github')}
+                  className={`text-xs font-sans px-3.5 py-1.5 rounded-sm transition-colors font-medium ${
+                    workspaceTab === 'github' 
+                      ? 'bg-surface-dark-elevated text-on-dark font-semibold' 
+                      : 'text-on-dark-soft hover:text-on-dark'
+                  }`}
+                >
+                  GitHub Repository
+                </button>
               </div>
-              <button
-                onClick={handleReview}
-                disabled={loading}
-                className="bg-primary hover:bg-primary-active text-on-primary font-medium text-xs rounded-sm px-5 py-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider"
-              >
-                {loading ? 'Analyzing...' : 'Analyze Code'}
-              </button>
+
+              {/* Language and Submit Group */}
+              <div className="flex items-center gap-3 self-end md:self-auto">
+                {workspaceTab !== 'github' && (
+                  <select
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value)}
+                    className="bg-surface-dark border border-hairline/10 rounded-sm text-xs px-3 py-1.5 text-on-dark focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                  >
+                    <option value="python">Python</option>
+                    <option value="javascript">JavaScript</option>
+                    <option value="typescript">TypeScript</option>
+                    <option value="java">Java</option>
+                    <option value="cpp">C++</option>
+                    <option value="go">Go</option>
+                  </select>
+                )}
+
+                {workspaceTab !== 'github' && (
+                  <button
+                    onClick={handleReview}
+                    disabled={loading}
+                    className="bg-primary hover:bg-primary-active text-on-primary font-medium text-xs rounded-sm px-5 py-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider"
+                  >
+                    {loading ? 'Analyzing...' : 'Analyze Code'}
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Monaco Editor Container */}
-            <div className="flex-1 min-h-[500px] bg-surface-dark">
-              <Editor
-                height="100%"
-                language={language}
-                theme="vs-dark"
-                value={code}
-                onChange={(value) => setCode(value || '')}
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 14,
-                  fontFamily: 'var(--font-mono), monospace',
-                  lineHeight: 22,
-                  padding: { top: 16, bottom: 16 },
-                  scrollbar: {
-                    vertical: 'visible',
-                    horizontal: 'visible',
-                  },
-                  roundedSelection: true,
-                  automaticLayout: true,
-                }}
-              />
+            {/* Tab Workspaces */}
+            <div className="flex-1 min-h-[500px] bg-surface-dark flex flex-col">
+              
+              {/* Tab 1: Editor */}
+              {workspaceTab === 'paste' && (
+                <div className="flex-1 h-full">
+                  <Editor
+                    height="100%"
+                    language={language}
+                    theme="vs-dark"
+                    value={code}
+                    onChange={(value) => setCode(value || '')}
+                    options={{
+                      minimap: { enabled: false },
+                      fontSize: 14,
+                      fontFamily: 'var(--font-mono), monospace',
+                      lineHeight: 22,
+                      padding: { top: 16, bottom: 16 },
+                      scrollbar: {
+                        vertical: 'visible',
+                        horizontal: 'visible',
+                      },
+                      roundedSelection: true,
+                      automaticLayout: true,
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Tab 2: File Upload Zone */}
+              {workspaceTab === 'upload' && (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-on-dark-soft">
+                  <div className="border-2 border-dashed border-hairline/20 hover:border-primary/50 transition-colors rounded-lg p-12 max-w-md w-full flex flex-col items-center justify-center bg-surface-dark-soft/50">
+                    <span className="text-4xl mb-4 block">📁</span>
+                    <h4 className="text-base font-serif text-on-dark font-medium mb-1">Drag and drop your file</h4>
+                    <p className="text-xs text-on-dark-soft/80 mb-6 font-sans">
+                      Only UTF-8 encoded text files are supported (.py, .js, .ts, .go, .java, .cpp)
+                    </p>
+                    <input 
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
+                      className="hidden"
+                      accept=".py,.js,.jsx,.ts,.tsx,.go,.java,.cpp,.cc,.h"
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="bg-surface-dark-elevated hover:bg-surface-dark text-on-dark border border-hairline/15 font-medium text-xs rounded-sm px-5 py-2.5 transition-colors uppercase tracking-wider"
+                    >
+                      Choose file
+                    </button>
+                    {uploadFilename && (
+                      <span className="text-xs text-primary font-medium mt-4 block">
+                        Loaded: {uploadFilename}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 3: GitHub Form */}
+              {workspaceTab === 'github' && (
+                <div className="flex-1 flex items-center justify-center p-8">
+                  <form onSubmit={handleGithubReview} className="max-w-md w-full bg-surface-dark-soft border border-hairline/10 rounded-lg p-6 space-y-5 font-sans">
+                    <h4 className="text-lg font-serif text-on-dark font-normal mb-2 text-center">
+                      Analyze GitHub Repository
+                    </h4>
+                    
+                    <div>
+                      <label className="block text-xs font-semibold text-on-dark-soft uppercase tracking-wider mb-1.5">
+                        Repository Git URL
+                      </label>
+                      <input
+                        type="url"
+                        required
+                        value={githubUrl}
+                        onChange={(e) => setGithubUrl(e.target.value)}
+                        placeholder="https://github.com/user/repo"
+                        className="w-full bg-surface-dark border border-hairline/15 text-on-dark text-xs rounded-sm px-3.5 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        type="button"
+                        onClick={() => setGithubMode('branch')}
+                        className={`text-xs font-medium py-2 rounded-sm border transition-colors ${
+                          githubMode === 'branch'
+                            ? 'bg-primary text-on-primary border-primary'
+                            : 'bg-surface-dark text-on-dark-soft border-hairline/10 hover:text-on-dark'
+                        }`}
+                      >
+                        Scan Branch
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGithubMode('pr')}
+                        className={`text-xs font-medium py-2 rounded-sm border transition-colors ${
+                          githubMode === 'pr'
+                            ? 'bg-primary text-on-primary border-primary'
+                            : 'bg-surface-dark text-on-dark-soft border-hairline/10 hover:text-on-dark'
+                        }`}
+                      >
+                        Scan Pull Request
+                      </button>
+                    </div>
+
+                    {githubMode === 'branch' ? (
+                      <div>
+                        <label className="block text-xs font-semibold text-on-dark-soft uppercase tracking-wider mb-1.5">
+                          Branch Name
+                        </label>
+                        <input
+                          type="text"
+                          value={githubBranch}
+                          onChange={(e) => setGithubBranch(e.target.value)}
+                          placeholder="main"
+                          className="w-full bg-surface-dark border border-hairline/15 text-on-dark text-xs rounded-sm px-3.5 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-semibold text-on-dark-soft uppercase tracking-wider mb-1.5">
+                          PR Number
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          value={githubPr}
+                          onChange={(e) => setGithubPr(e.target.value)}
+                          placeholder="42"
+                          className="w-full bg-surface-dark border border-hairline/15 text-on-dark text-xs rounded-sm px-3.5 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                        />
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full bg-primary hover:bg-primary-active text-on-primary font-medium text-xs rounded-sm py-3 transition-colors uppercase tracking-wider disabled:opacity-50"
+                    >
+                      {loading ? 'Cloning & Reviewing...' : 'Scan Repository'}
+                    </button>
+                  </form>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Right Side: Results Showcase */}
+          {/* Right Panel: Showcase Results */}
           <div className="lg:col-span-5 flex flex-col space-y-6 justify-start">
-            {/* Empty welcome state */}
+            
+            {/* Idle Welcome Screen */}
             {!loading && !reviewResult && !error && (
               <div className="flex flex-col items-center justify-center text-center p-10 bg-surface-card border border-hairline rounded-lg h-full min-h-[400px]">
                 <span className="text-5xl block mb-6">🔍</span>
                 <h3 className="text-xl font-serif font-medium text-ink">Ready for Review</h3>
                 <p className="text-sm text-body mt-2 max-w-xs leading-relaxed">
-                  Input your code in the workspace editor and select your language, then click <strong className="text-ink font-semibold">Analyze Code</strong> to trigger review analysis.
+                  Input your code in the workspace editor, upload a file, or target a GitHub repository, then hit analyze to execute validation.
                 </p>
               </div>
             )}
 
-            {/* Loading Indicator */}
+            {/* Spinner Loading Screen */}
             {loading && (
               <div className="flex flex-col items-center justify-center p-10 bg-surface-card border border-hairline rounded-lg h-full min-h-[400px]">
                 <div className="relative w-16 h-16 mb-6">
@@ -203,7 +631,7 @@ export default function Home() {
                 </div>
                 <h3 className="text-lg font-serif font-medium text-ink">Analyzing Pipeline...</h3>
                 <p className="text-xs text-muted mt-2 text-center max-w-xs leading-relaxed font-sans">
-                  Invoking static analyzers, evaluating code complexity metrics, and validating structural patterns...
+                  Invoking AST parsers, executing structural syntax analysis, and computing security audit thresholds...
                 </p>
               </div>
             )}
@@ -218,16 +646,18 @@ export default function Home() {
                 <p className="text-sm text-body-strong mt-3 leading-relaxed">
                   {error}
                 </p>
-                <button
-                  onClick={handleReview}
-                  className="mt-4 text-xs font-semibold px-4 py-2 rounded-sm bg-error/10 text-error border border-error/20 hover:bg-error/15 transition-all duration-200"
-                >
-                  Retry Request
-                </button>
+                {workspaceTab !== 'github' && (
+                  <button
+                    onClick={handleReview}
+                    className="mt-4 text-xs font-semibold px-4 py-2 rounded-sm bg-error/10 text-error border border-error/20 hover:bg-error/15 transition-all duration-200"
+                  >
+                    Retry Request
+                  </button>
+                )}
               </div>
             )}
 
-            {/* Finalized Review Reports */}
+            {/* Report Display */}
             {reviewResult && (
               <div className="space-y-6">
                 <ScoreCard
@@ -240,7 +670,6 @@ export default function Home() {
                     documentation: Math.max(reviewResult.score - 20, 40),
                   }}
                 />
-
                 <ReviewCard issues={reviewResult.issues} />
               </div>
             )}
@@ -264,6 +693,107 @@ export default function Home() {
           </div>
         </div>
       </footer>
+
+      {/* Left History Slide-over Drawer */}
+      {isHistoryOpen && (
+        <div className="fixed inset-0 z-50 overflow-hidden font-sans">
+          <div className="absolute inset-0 bg-surface-dark/40 backdrop-blur-sm transition-opacity" onClick={() => setIsHistoryOpen(false)} />
+          <div className="absolute inset-y-0 left-0 max-w-full flex">
+            <div className="w-screen max-w-md bg-canvas border-r border-hairline shadow-2xl flex flex-col h-full transform transition-all duration-300">
+              
+              {/* Drawer Header */}
+              <div className="px-6 py-5 border-b border-hairline flex items-center justify-between">
+                <h3 className="text-xl font-serif text-ink font-normal tracking-tight">
+                  Review History
+                </h3>
+                <button
+                  onClick={() => setIsHistoryOpen(false)}
+                  className="text-muted hover:text-ink w-8 h-8 rounded-full border border-hairline flex items-center justify-center text-lg bg-canvas hover:bg-surface-card transition-colors focus:outline-none"
+                >
+                  &times;
+                </button>
+              </div>
+
+              {/* History list content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {historyLoading ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted">
+                    <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-4" />
+                    <span className="text-xs">Loading history record...</span>
+                  </div>
+                ) : historyList.length === 0 ? (
+                  <div className="text-center py-12 text-muted max-w-xs mx-auto">
+                    <span className="text-3xl block mb-3">📁</span>
+                    <p className="text-sm font-medium text-ink">No saved reports</p>
+                    <p className="text-xs mt-1">
+                      Review code blocks while signed in to automatically persist analysis history here.
+                    </p>
+                  </div>
+                ) : (
+                  historyList.map((item) => {
+                    const dateStr = new Date(item.created_at).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    });
+                    
+                    const scoreColor = item.score >= 85 
+                      ? 'text-success bg-success/5 border-success/20' 
+                      : item.score >= 70 
+                        ? 'text-amber-500 bg-amber-500/5 border-amber-500/20' 
+                        : 'text-error bg-error/5 border-error/20';
+
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => handleLoadHistoryItem(item.id)}
+                        className="p-4 bg-surface-card border border-hairline hover:border-primary/40 rounded-lg cursor-pointer transition-all hover:translate-x-0.5 flex items-center justify-between gap-4 group"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-mono font-medium text-muted uppercase bg-canvas border border-hairline px-2 py-0.5 rounded-sm">
+                              {item.language}
+                            </span>
+                            <span className="text-xs text-muted-soft">
+                              {dateStr}
+                            </span>
+                          </div>
+                          <span className="text-xs text-body truncate block">
+                            Report: {item.id.slice(0, 8)}...
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span className={`text-sm font-bold border px-2.5 py-1 rounded-sm ${scoreColor}`}>
+                            {item.score}
+                          </span>
+                          <button
+                            onClick={(e) => handleDeleteHistoryItem(e, item.id)}
+                            className="text-muted hover:text-error opacity-0 group-hover:opacity-100 p-1.5 rounded-sm border border-transparent hover:border-error/25 hover:bg-error/5 transition-all focus:outline-none"
+                            title="Delete record"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Auth Signin/Signup Dialog Modal */}
+      <AuthModal 
+        isOpen={isAuthModalOpen} 
+        onClose={() => setIsAuthModalOpen(false)} 
+      />
+
     </div>
   );
 }
