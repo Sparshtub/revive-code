@@ -500,6 +500,16 @@ async def get_review(review_id: str, current_user: dict = Depends(get_optional_c
     except Exception:
         category_scores = {}
 
+    files_content = {}
+    if row["language"] == "multiple":
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT file_path, code_content FROM review_files WHERE review_id = ?;", (review_id,))
+        file_rows = cursor.fetchall()
+        conn.close()
+        for f_row in file_rows:
+            files_content[f_row["file_path"]] = f_row["code_content"]
+
     severity_counts = {
         "critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0
     }
@@ -507,7 +517,7 @@ async def get_review(review_id: str, current_user: dict = Depends(get_optional_c
         sev = issue.get("severity", "Low").lower()
         if sev in severity_counts:
             severity_counts[sev] += 1
-            
+
     return {
         "id": row["id"],
         "code": row["code"],
@@ -520,6 +530,7 @@ async def get_review(review_id: str, current_user: dict = Depends(get_optional_c
         "issues": issues_list,
         "embedding": embedding_list,
         "surprise_scores": surprise_scores_list,
+        "files_content": files_content,
         "created_at": row["created_at"]
     }
 

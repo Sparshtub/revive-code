@@ -30,10 +30,15 @@ async def health_check():
     }
 
 # Include routers
+from app.github import auth as github_auth, repository as github_repo, pull_request as github_pr
+
 app.include_router(review.router, prefix="/api/v1")
 app.include_router(upload.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(github.router, prefix="/api/v1")
+app.include_router(github_auth.router, prefix="/api/v1")
+app.include_router(github_repo.router, prefix="/api/v1")
+app.include_router(github_pr.router, prefix="/api/v1")
 app.include_router(history.router, prefix="/api/v1")
 
 if __name__ == "__main__":

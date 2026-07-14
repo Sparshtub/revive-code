@@ -71,6 +71,28 @@ def init_db():
         cursor.execute("ALTER TABLE reviews ADD COLUMN summary TEXT;")
     except sqlite3.OperationalError:
         pass
+
+    # Create review_files table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS review_files (
+            review_id TEXT,
+            file_path TEXT,
+            code_content TEXT,
+            PRIMARY KEY (review_id, file_path),
+            FOREIGN KEY (review_id) REFERENCES reviews (id) ON DELETE CASCADE
+        );
+    """)
+
+    # Migrate users for github credentials
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN github_username TEXT;")
+    except sqlite3.OperationalError:
+        pass
+        
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN github_access_token TEXT;")
+    except sqlite3.OperationalError:
+        pass
     
     conn.commit()
     conn.close()

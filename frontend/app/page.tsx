@@ -7,6 +7,11 @@ import ReviewCard, { Issue } from '@/components/ReviewCard';
 import AuthModal from '@/components/AuthModal';
 import { useAuth } from '@/components/AuthContext';
 import ReviewDashboard from '@/components/dashboard/ReviewDashboard';
+import GithubLoginButton from '@/components/dashboard/GithubLoginButton';
+import RepositorySelector from '@/components/dashboard/RepositorySelector';
+import PullRequestSelector from '@/components/dashboard/PullRequestSelector';
+import RepositoryDashboard from '@/components/dashboard/RepositoryDashboard';
+import RepositoryHistory from '@/components/dashboard/RepositoryHistory';
 
 interface ReviewResponse {
   id?: string;
@@ -267,6 +272,11 @@ export default function Home() {
   const [language, setLanguage] = useState<string>('python');
   const [workspaceTab, setWorkspaceTab] = useState<'paste' | 'upload' | 'github'>('paste');
   const [uploadFilename, setUploadFilename] = useState<string | null>(null);
+  
+  // GitHub Integration States
+  const [githubUsername, setGithubUsername] = useState<string | null>(null);
+  const [selectedRepoUrl, setSelectedRepoUrl] = useState<string | null>(null);
+  const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState<number>(0);
   
   // GitHub Integration States
   const [githubUrl, setGithubUrl] = useState<string>('');
@@ -617,45 +627,54 @@ export default function Home() {
       <main className="flex-1 bg-surface-soft border-b border-hairline py-12 px-6 sm:px-12">
         {reviewResult ? (
           <div className="space-y-6">
-            <div className="max-w-6xl mx-auto flex justify-between items-center font-sans">
-              <span className="text-xs text-muted">
-                Inspect analysis results or start a new scan.
-              </span>
-              <button
-                onClick={() => setReviewResult(null)}
-                className="text-xs font-semibold px-4 py-2 bg-primary hover:bg-primary-active text-on-primary rounded-sm transition-colors uppercase tracking-wider focus:outline-none"
-              >
-                &larr; New Scan
-              </button>
-            </div>
-            <ReviewDashboard
-              reviewData={{
-                id: reviewResult.id,
-                code: reviewResult.code || code,
-                language: reviewResult.language || language,
-                overallScore: reviewResult.overallScore !== undefined ? reviewResult.overallScore : reviewResult.score,
-                categoryScores: reviewResult.categoryScores || {
-                  readability: reviewResult.score,
-                  security: Math.max(reviewResult.score - 10, 50),
-                  performance: Math.min(reviewResult.score + 5, 100),
-                  maintainability: reviewResult.score,
-                  documentation: Math.max(reviewResult.score - 20, 40),
-                  bestPractices: reviewResult.score,
-                },
-                severityCounts: reviewResult.severityCounts || {
-                  critical: 0,
-                  high: 0,
-                  medium: 0,
-                  low: 0,
-                  info: 0,
-                },
-                summary: reviewResult.summary,
-                issues: reviewResult.issues,
-                embedding: reviewResult.embedding,
-                surprise_scores: reviewResult.surprise_scores,
-                created_at: reviewResult.created_at || new Date().toISOString(),
-              }}
-            />
+            {reviewResult.language === 'multiple' ? (
+              <RepositoryDashboard
+                repoData={reviewResult as any}
+                onNewScan={() => setReviewResult(null)}
+              />
+            ) : (
+              <>
+                <div className="max-w-6xl mx-auto flex justify-between items-center font-sans">
+                  <span className="text-xs text-muted">
+                    Inspect analysis results or start a new scan.
+                  </span>
+                  <button
+                    onClick={() => setReviewResult(null)}
+                    className="text-xs font-semibold px-4 py-2 bg-primary hover:bg-primary-active text-on-primary rounded-sm transition-colors uppercase tracking-wider focus:outline-none"
+                  >
+                    &larr; New Scan
+                  </button>
+                </div>
+                <ReviewDashboard
+                  reviewData={{
+                    id: reviewResult.id,
+                    code: reviewResult.code || code,
+                    language: reviewResult.language || language,
+                    overallScore: reviewResult.overallScore !== undefined ? reviewResult.overallScore : reviewResult.score,
+                    categoryScores: reviewResult.categoryScores || {
+                      readability: reviewResult.score,
+                      security: Math.max(reviewResult.score - 10, 50),
+                      performance: Math.min(reviewResult.score + 5, 100),
+                      maintainability: reviewResult.score,
+                      documentation: Math.max(reviewResult.score - 20, 40),
+                      bestPractices: reviewResult.score,
+                    },
+                    severityCounts: reviewResult.severityCounts || {
+                      critical: 0,
+                      high: 0,
+                      medium: 0,
+                      low: 0,
+                      info: 0,
+                    },
+                    summary: reviewResult.summary,
+                    issues: reviewResult.issues,
+                    embedding: reviewResult.embedding,
+                    surprise_scores: reviewResult.surprise_scores,
+                    created_at: reviewResult.created_at || new Date().toISOString(),
+                  }}
+                />
+              </>
+            )}
           </div>
         ) : (
           <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -789,90 +808,121 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Tab 3: GitHub Form */}
+                {/* Tab 3: GitHub Panel */}
                 {workspaceTab === 'github' && (
-                  <div className="flex-1 flex items-center justify-center p-8">
-                    <form onSubmit={handleGithubReview} className="max-w-md w-full bg-surface-dark-soft border border-hairline/10 rounded-lg p-6 space-y-5 font-sans">
-                      <h4 className="text-lg font-serif text-on-dark font-normal mb-2 text-center">
-                        Analyze GitHub Repository
-                      </h4>
-                      
-                      <div>
-                        <label className="block text-xs font-semibold text-on-dark-soft uppercase tracking-wider mb-1.5">
-                          Repository Git URL
-                        </label>
-                        <input
-                          type="url"
-                          required
-                          value={githubUrl}
-                          onChange={(e) => setGithubUrl(e.target.value)}
-                          placeholder="https://github.com/user/repo"
-                          className="w-full bg-surface-dark border border-hairline/15 text-on-dark text-xs rounded-sm px-3.5 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <button
-                          type="button"
-                          onClick={() => setGithubMode('branch')}
-                          className={`text-xs font-medium py-2 rounded-sm border transition-colors ${
-                            githubMode === 'branch'
-                              ? 'bg-primary text-on-primary border-primary'
-                              : 'bg-surface-dark text-on-dark-soft border-hairline/10 hover:text-on-dark'
-                          }`}
-                        >
-                          Scan Branch
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setGithubMode('pr')}
-                          className={`text-xs font-medium py-2 rounded-sm border transition-colors ${
-                            githubMode === 'pr'
-                              ? 'bg-primary text-on-primary border-primary'
-                              : 'bg-surface-dark text-on-dark-soft border-hairline/10 hover:text-on-dark'
-                          }`}
-                        >
-                          Scan Pull Request
-                        </button>
-                      </div>
-
-                      {githubMode === 'branch' ? (
+                  <div className="flex-1 flex flex-col p-6 space-y-6">
+                    <GithubLoginButton
+                      token={token}
+                      isAuthenticated={isAuthenticated}
+                      githubUsername={githubUsername}
+                      setGithubUsername={setGithubUsername}
+                      onConnected={(username) => {
+                        setGithubUsername(username);
+                        setHistoryRefreshTrigger(prev => prev + 1);
+                      }}
+                      onDisconnected={() => {
+                        setGithubUsername(null);
+                        setSelectedRepoUrl(null);
+                      }}
+                    />
+                    
+                    {githubUsername ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                        <div className="space-y-6">
+                          <RepositorySelector
+                            token={token}
+                            prMode={githubMode}
+                            onTogglePrMode={setGithubMode}
+                            selectedRepoUrl={selectedRepoUrl}
+                            setSelectedRepoUrl={setSelectedRepoUrl}
+                            selectedBranch={githubBranch}
+                            setSelectedBranch={setGithubBranch}
+                            onSelectRepo={async (url, br) => {
+                              setLoading(true);
+                              setError(null);
+                              try {
+                                const headers: Record<string, string> = {
+                                  'Content-Type': 'application/json',
+                                  'Authorization': `Bearer ${token}`
+                                };
+                                const res = await fetch('http://127.0.0.1:8000/api/v1/github/review', {
+                                  method: 'POST',
+                                  headers,
+                                  body: JSON.stringify({ repository_url: url, branch: br })
+                                });
+                                const data = await res.json();
+                                if (!res.ok) throw new Error(data.detail || 'Scan failed');
+                                setReviewResult(data);
+                                setHistoryRefreshTrigger(prev => prev + 1);
+                              } catch (err: any) {
+                                setError(err.message || 'Failed to scan repository');
+                              } finally {
+                                setLoading(false);
+                              }
+                            }}
+                          />
+                          {githubMode === 'pr' && selectedRepoUrl && (
+                            <PullRequestSelector
+                              token={token}
+                              selectedRepoUrl={selectedRepoUrl}
+                              onSelectPr={async (prNum) => {
+                                setLoading(true);
+                                setError(null);
+                                try {
+                                  const headers: Record<string, string> = {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                  };
+                                  const res = await fetch('http://127.0.0.1:8000/api/v1/github/pull-request/review', {
+                                    method: 'POST',
+                                    headers,
+                                    body: JSON.stringify({ repository_url: selectedRepoUrl, pr_number: prNum })
+                                  });
+                                  const data = await res.json();
+                                  if (!res.ok) throw new Error(data.detail || 'Scan failed');
+                                  setReviewResult(data);
+                                  setHistoryRefreshTrigger(prev => prev + 1);
+                                } catch (err: any) {
+                                  setError(err.message || 'Failed to scan Pull Request');
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }}
+                            />
+                          )}
+                        </div>
                         <div>
-                          <label className="block text-xs font-semibold text-on-dark-soft uppercase tracking-wider mb-1.5">
-                            Branch Name
-                          </label>
-                          <input
-                            type="text"
-                            value={githubBranch}
-                            onChange={(e) => setGithubBranch(e.target.value)}
-                            placeholder="main"
-                            className="w-full bg-surface-dark border border-hairline/15 text-on-dark text-xs rounded-sm px-3.5 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
+                          <RepositoryHistory
+                            token={token}
+                            refreshTrigger={historyRefreshTrigger}
+                            onLoadItem={handleLoadHistoryItem}
+                            onDeleteItem={async (id) => {
+                              if (confirm('Are you sure you want to delete this scan log?')) {
+                                try {
+                                  const res = await fetch(`http://127.0.0.1:8000/api/v1/review/${id}`, {
+                                    method: 'DELETE',
+                                    headers: { 'Authorization': `Bearer ${token}` }
+                                  });
+                                  if (res.ok) {
+                                    setHistoryRefreshTrigger(prev => prev + 1);
+                                  }
+                                } catch (err) {
+                                  console.error(err);
+                                }
+                              }
+                            }}
                           />
                         </div>
-                      ) : (
-                        <div>
-                          <label className="block text-xs font-semibold text-on-dark-soft uppercase tracking-wider mb-1.5">
-                            PR Number
-                          </label>
-                          <input
-                            type="number"
-                            required
-                            value={githubPr}
-                            onChange={(e) => setGithubPr(e.target.value)}
-                            placeholder="42"
-                            className="w-full bg-surface-dark border border-hairline/15 text-on-dark text-xs rounded-sm px-3.5 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                          />
-                        </div>
-                      )}
-
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-primary hover:bg-primary-active text-on-primary font-medium text-xs rounded-sm py-3 transition-colors uppercase tracking-wider disabled:opacity-50"
-                      >
-                        {loading ? 'Cloning & Reviewing...' : 'Scan Repository'}
-                      </button>
-                    </form>
+                      </div>
+                    ) : (
+                      <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-on-dark-soft border border-dashed border-hairline/20 rounded-lg">
+                        <span className="text-4xl mb-4 block">🐱</span>
+                        <h4 className="text-base font-serif text-on-dark font-medium mb-1">GitHub Account Required</h4>
+                        <p className="text-xs text-on-dark-soft/80 font-sans max-w-sm">
+                          Please connect your GitHub account using the panel above to scan repositories and review pull requests.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
