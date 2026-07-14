@@ -17,7 +17,7 @@ export default function RepositorySummary({ summary }: RepositorySummaryProps) {
                     AI Repository Insights
                 </h4>
                 <p className="text-sm text-body-strong leading-relaxed font-serif italic text-justify pr-6">
-                    "{summary}"
+                    &ldquo;{summary}&rdquo;
                 </p>
                 
                 <div className="mt-5 pt-3.5 border-t border-hairline flex items-center gap-2 text-[10px] text-muted font-semibold uppercase tracking-wider">

@@ -35,7 +35,7 @@ interface RepositoryStatsProps {
 export default function RepositoryStats({
     filesCount,
     severityCounts,
-    categoryScores,
+    categoryScores: _categoryScores,
     languageBreakdown,
     problematicFiles,
     commonIssueTypes

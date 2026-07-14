@@ -7,6 +7,8 @@ import ScoreChart from './ScoreChart';
 import IssueList from './IssueList';
 import MonacoViewer from './MonacoViewer';
 import { Issue } from '../ReviewCard';
+import PrintableReport from './PrintableReport';
+import { exportToJSON, exportToCSV, exportToMarkdown } from '../../lib/exportUtils';
 
 interface ReviewDashboardProps {
   reviewData: {
@@ -45,72 +47,79 @@ export default function ReviewDashboard({ reviewData }: ReviewDashboardProps) {
   };
 
   const handleExportJSON = () => {
-    const filename = `revivecode-report-${reviewData.id || 'export'}.json`;
-    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
-      JSON.stringify(reviewData, null, 2)
-    )}`;
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', jsonString);
-    downloadAnchor.setAttribute('download', filename);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
+    exportToJSON(reviewData);
+  };
+
+  const handleExportCSV = () => {
+    exportToCSV(reviewData);
+  };
+
+  const handleExportMarkdown = () => {
+    exportToMarkdown(reviewData);
   };
 
   const handleExportPDF = () => {
-    // Print window triggers standard PDF print dialog natively
     window.print();
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-12">
-      {/* Review Header */}
-      <ReviewHeader
-        id={reviewData.id}
-        language={reviewData.language}
-        timestamp={reviewData.created_at}
-        onExportJSON={handleExportJSON}
-        onExportPDF={handleExportPDF}
-      />
+    <>
+      <div className="print:hidden space-y-6 max-w-6xl mx-auto pb-12">
+        {/* Review Header */}
+        <ReviewHeader
+          id={reviewData.id}
+          language={reviewData.language}
+          timestamp={reviewData.created_at}
+          onExportJSON={handleExportJSON}
+          onExportPDF={handleExportPDF}
+          onExportMarkdown={handleExportMarkdown}
+          onExportCSV={handleExportCSV}
+        />
 
-      {/* Main Grid: Overall dial, category bars, severity distribution */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-12 gap-6 items-stretch">
-        <div className="md:col-span-1 lg:col-span-3">
-          <OverallScoreCard score={reviewData.overallScore} />
-        </div>
-        <div className="md:col-span-2 lg:col-span-6">
-          <CategoryScoreCard categories={reviewData.categoryScores} />
-        </div>
-        <div className="md:col-span-3 lg:col-span-3">
-          <ScoreChart severityCounts={reviewData.severityCounts} />
-        </div>
-      </div>
-
-      {/* AI Narrative Section */}
-      {reviewData.summary && <AISummary summary={reviewData.summary} />}
-
-      {/* Dual Column Explorer: Code Viewer on Left, Issue Explorer on Right */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        <div className="lg:col-span-7">
-          <MonacoViewer
-            code={reviewData.code}
-            language={reviewData.language}
-            issues={reviewData.issues}
-            scrollToLineTrigger={scrollToLine}
-          />
-        </div>
-        <div className="lg:col-span-5 h-[495px] overflow-y-auto pr-1">
-          <div className="sticky top-0 bg-canvas pb-2 z-10">
-            <h3 className="text-sm font-sans font-semibold text-muted uppercase tracking-wider mb-3">
-              Issue Explorer ({reviewData.issues.length})
-            </h3>
+        {/* Main Grid: Overall dial, category bars, severity distribution */}
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-12 gap-6 items-stretch">
+          <div className="md:col-span-1 lg:col-span-3">
+            <OverallScoreCard score={reviewData.overallScore} />
           </div>
-          <IssueList 
-            issues={reviewData.issues} 
-            onSelectLine={handleSelectLine} 
-          />
+          <div className="md:col-span-2 lg:col-span-6">
+            <CategoryScoreCard categories={reviewData.categoryScores} />
+          </div>
+          <div className="md:col-span-3 lg:col-span-3">
+            <ScoreChart severityCounts={reviewData.severityCounts} />
+          </div>
+        </div>
+
+        {/* AI Narrative Section */}
+        {reviewData.summary && <AISummary summary={reviewData.summary} />}
+
+        {/* Dual Column Explorer: Code Viewer on Left, Issue Explorer on Right */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="lg:col-span-7">
+            <MonacoViewer
+              code={reviewData.code}
+              language={reviewData.language}
+              issues={reviewData.issues}
+              scrollToLineTrigger={scrollToLine}
+            />
+          </div>
+          <div className="lg:col-span-5 h-[495px] overflow-y-auto pr-1">
+            <div className="sticky top-0 bg-canvas pb-2 z-10">
+              <h3 className="text-sm font-sans font-semibold text-muted uppercase tracking-wider mb-3">
+                Issue Explorer ({reviewData.issues.length})
+              </h3>
+            </div>
+            <IssueList 
+              issues={reviewData.issues} 
+              onSelectLine={handleSelectLine} 
+            />
+          </div>
         </div>
       </div>
-    </div>
+
+      <div className="hidden print:block bg-white text-black min-h-screen">
+        <PrintableReport reviewData={reviewData} />
+      </div>
+    </>
   );
 }
+

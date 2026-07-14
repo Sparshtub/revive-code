@@ -30,45 +30,45 @@ export default function PullRequestSelector({
     const [selectedPrNumber, setSelectedPrNumber] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    // Extract owner/repo name from URL
-    const getRepoFullName = () => {
-        try {
-            const url = new URL(selectedRepoUrl);
-            const path = url.pathname.replace(/^\/|\/$/g, '');
-            const parts = path.split('/');
-            if (parts.length >= 2) {
-                return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
-            }
-            return '';
-        } catch {
-            return '';
-        }
-    };
-
     useEffect(() => {
+        const getRepoFullName = () => {
+            try {
+                const url = new URL(selectedRepoUrl || '');
+                const path = url.pathname.replace(/^\/|\/$/g, '');
+                const parts = path.split('/');
+                if (parts.length >= 2) {
+                    return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
+                }
+                return '';
+            } catch {
+                return '';
+            }
+        };
+
+        const fetchPullRequests = async (repoFullName: string) => {
+            setLoading(true);
+            setError(null);
+            setSelectedPrNumber(null);
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/v1/github/repositories/${repoFullName}/pulls`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) throw new Error('Failed to load pull requests');
+                const data = await res.json();
+                setPullRequests(data.pulls || []);
+            } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : String(err);
+                setError(message || 'Failed to fetch PRs');
+            } finally {
+                setLoading(false);
+            }
+        };
+
         const repoFullName = getRepoFullName();
         if (token && repoFullName) {
             fetchPullRequests(repoFullName);
         }
     }, [token, selectedRepoUrl]);
-
-    const fetchPullRequests = async (repoFullName: string) => {
-        setLoading(true);
-        setError(null);
-        setSelectedPrNumber(null);
-        try {
-            const res = await fetch(`${API_BASE_URL}/api/v1/github/repositories/${repoFullName}/pulls`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!res.ok) throw new Error('Failed to load pull requests');
-            const data = await res.json();
-            setPullRequests(data.pulls || []);
-        } catch (err: any) {
-            setError(err.message || 'Failed to fetch PRs');
-        } finally {
-            setLoading(false);
-        }
-    };
 
     return (
         <div className="bg-surface-card border border-hairline rounded-lg p-6 font-sans space-y-4">

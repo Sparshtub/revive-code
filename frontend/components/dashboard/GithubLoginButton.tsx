@@ -22,42 +22,42 @@ export default function GithubLoginButton({
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        const checkConnection = async () => {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/v1/github/repositories`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    // If this succeeds, it means user is connected.
+                    // Let's get user profile info or default
+                    const profileRes = await fetch(`${API_BASE_URL}/api/v1/github/connect`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ code: 'mock_ping' })
+                    });
+                    if (profileRes.ok) {
+                        const profileData = await profileRes.json();
+                        setGithubUsername(profileData.github_username);
+                        onConnected(profileData.github_username);
+                    }
+                } else {
+                    setGithubUsername(null);
+                }
+            } catch {
+                setGithubUsername(null);
+            }
+        };
+
         // Fetch current connected status when authenticated
         if (isAuthenticated && token) {
             checkConnection();
         } else {
             setGithubUsername(null);
         }
-    }, [isAuthenticated, token]);
-
-    const checkConnection = async () => {
-        try {
-            const res = await fetch(`${API_BASE_URL}/api/v1/github/repositories`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (res.ok) {
-                // If this succeeds, it means user is connected.
-                // Let's get user profile info or default
-                const profileRes = await fetch(`${API_BASE_URL}/api/v1/github/connect`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ code: 'mock_ping' })
-                });
-                if (profileRes.ok) {
-                    const profileData = await profileRes.json();
-                    setGithubUsername(profileData.github_username);
-                    onConnected(profileData.github_username);
-                }
-            } else {
-                setGithubUsername(null);
-            }
-        } catch (err) {
-            setGithubUsername(null);
-        }
-    };
+    }, [isAuthenticated, token, onConnected, setGithubUsername]);
 
     const handleConnect = async (mode: 'real' | 'mock') => {
         setLoading(true);
@@ -86,8 +86,9 @@ export default function GithubLoginButton({
                 const scope = 'repo,read:user';
                 window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
             }
-        } catch (err: any) {
-            setError(err.message || 'Failed to connect to GitHub');
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            setError(message || 'Failed to connect to GitHub');
         } finally {
             setLoading(false);
         }
@@ -104,7 +105,7 @@ export default function GithubLoginButton({
                 setGithubUsername(null);
                 onDisconnected();
             }
-        } catch (err) {
+        } catch {
             setError('Failed to disconnect GitHub account');
         } finally {
             setLoading(false);

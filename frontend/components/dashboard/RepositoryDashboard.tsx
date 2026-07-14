@@ -8,6 +8,8 @@ import IssueList from './IssueList';
 import RepositoryStats from './RepositoryStats';
 import RepositorySummary from './RepositorySummary';
 import { Issue } from '../ReviewCard';
+import PrintableReport from './PrintableReport';
+import { exportToJSON, exportToCSV, exportToMarkdown } from '../../lib/exportUtils';
 
 interface RepositoryDashboardProps {
     repoData: {
@@ -39,6 +41,7 @@ interface RepositoryDashboardProps {
         problematic_files: Array<{ file: string; score: number }>;
         common_issue_types: Array<{ title: string; count: number }>;
         language_breakdown: Record<string, number>;
+        created_at?: string;
     };
     onNewScan: () => void;
 }
@@ -90,44 +93,91 @@ export default function RepositoryDashboard({ repoData, onNewScan }: RepositoryD
         return parts[0] || repoData.label;
     };
 
+    const handleExportJSON = () => {
+        exportToJSON(repoData);
+    };
+
+    const handleExportCSV = () => {
+        exportToCSV(repoData);
+    };
+
+    const handleExportMarkdown = () => {
+        exportToMarkdown(repoData);
+    };
+
+    const handleExportPDF = () => {
+        window.print();
+    };
+
     return (
-        <div className="space-y-8 max-w-6xl mx-auto pb-12 font-sans text-ink">
-            {/* Repo Header Meta Block */}
-            <div className="bg-canvas border border-hairline rounded-lg p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                        <span className="text-xl">📊</span>
-                        <h2 className="text-xl font-serif font-semibold truncate max-w-lg" title={repoData.label}>
-                            {getShortLabel()}
-                        </h2>
+        <>
+            <div className="print:hidden space-y-8 max-w-6xl mx-auto pb-12 font-sans text-ink">
+                {/* Repo Header Meta Block */}
+                <div className="bg-canvas border border-hairline rounded-lg p-6 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xl">📊</span>
+                            <h2 className="text-xl font-serif font-semibold truncate max-w-lg" title={repoData.label}>
+                                {getShortLabel()}
+                            </h2>
+                        </div>
+                        <div className="text-xs text-muted flex flex-wrap items-center gap-4 font-mono">
+                            {repoData.branch && (
+                                <span className="px-2 py-0.5 bg-surface-card border border-hairline rounded-sm">
+                                    Branch: {repoData.branch}
+                                </span>
+                            )}
+                            {repoData.pr_number && (
+                                <span className="px-2 py-0.5 bg-purple-500/10 text-purple-700 border border-purple-500/20 rounded-sm font-semibold">
+                                    Pull Request #{repoData.pr_number}
+                                </span>
+                            )}
+                            {repoData.commit && (
+                                <span className="truncate max-w-[200px]" title={repoData.commit}>
+                                    Commit: {repoData.commit.slice(0, 8)}
+                                </span>
+                            )}
+                            <span>Files: {repoData.files_count}</span>
+                        </div>
                     </div>
-                    <div className="text-xs text-muted flex flex-wrap items-center gap-4 font-mono">
-                        {repoData.branch && (
-                            <span className="px-2 py-0.5 bg-surface-card border border-hairline rounded-sm">
-                                Branch: {repoData.branch}
-                            </span>
-                        )}
-                        {repoData.pr_number && (
-                            <span className="px-2 py-0.5 bg-purple-500/10 text-purple-700 border border-purple-500/20 rounded-sm font-semibold">
-                                Pull Request #{repoData.pr_number}
-                            </span>
-                        )}
-                        {repoData.commit && (
-                            <span className="truncate max-w-[200px]" title={repoData.commit}>
-                                Commit: {repoData.commit.slice(0, 8)}
-                            </span>
-                        )}
-                        <span>Files: {repoData.files_count}</span>
+
+                    <div className="flex flex-wrap items-center gap-2.5 font-sans w-full xl:w-auto">
+                        <button
+                            onClick={handleExportPDF}
+                            className="flex-1 sm:flex-none text-xs font-semibold px-3 py-2 border border-hairline hover:border-primary/30 text-ink bg-canvas hover:bg-surface-cream-strong transition-colors rounded-sm flex items-center justify-center gap-1.5 focus:outline-none"
+                            title="Print or Save Report as PDF"
+                        >
+                            <span>📄</span> PDF Report
+                        </button>
+                        <button
+                            onClick={handleExportMarkdown}
+                            className="flex-1 sm:flex-none text-xs font-semibold px-3 py-2 border border-hairline hover:border-primary/30 text-ink bg-canvas hover:bg-surface-cream-strong transition-colors rounded-sm flex items-center justify-center gap-1.5 focus:outline-none"
+                            title="Download Report as Markdown"
+                        >
+                            <span>📝</span> Markdown
+                        </button>
+                        <button
+                            onClick={handleExportCSV}
+                            className="flex-1 sm:flex-none text-xs font-semibold px-3 py-2 border border-hairline hover:border-primary/30 text-ink bg-canvas hover:bg-surface-cream-strong transition-colors rounded-sm flex items-center justify-center gap-1.5 focus:outline-none"
+                            title="Download Issues as CSV"
+                        >
+                            <span>📊</span> CSV Spreadsheet
+                        </button>
+                        <button
+                            onClick={handleExportJSON}
+                            className="flex-1 sm:flex-none text-xs font-semibold px-3 py-2 border border-hairline hover:border-primary/30 text-ink bg-canvas hover:bg-surface-cream-strong transition-colors rounded-sm flex items-center justify-center gap-1.5 focus:outline-none"
+                            title="Download Report as JSON"
+                        >
+                            <span>📥</span> JSON Data
+                        </button>
+                        <button
+                            onClick={onNewScan}
+                            className="flex-1 sm:flex-none bg-primary hover:bg-primary-active text-on-primary font-semibold text-xs rounded-sm px-4 py-2 transition-colors uppercase tracking-wider text-center"
+                        >
+                            &larr; New scan
+                        </button>
                     </div>
                 </div>
-
-                <button
-                    onClick={onNewScan}
-                    className="self-stretch md:self-auto bg-primary hover:bg-primary-active text-on-primary font-medium text-xs rounded-sm px-5 py-2.5 transition-colors uppercase tracking-wider text-center"
-                >
-                    &larr; New scan
-                </button>
-            </div>
 
             {/* Health Score Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-12 gap-6 items-stretch">
@@ -225,5 +275,9 @@ export default function RepositoryDashboard({ repoData, onNewScan }: RepositoryD
                 </div>
             </div>
         </div>
-    );
+        <div className="hidden print:block bg-white text-black min-h-screen">
+            <PrintableReport reviewData={repoData} isRepository={true} />
+        </div>
+    </>
+);
 }

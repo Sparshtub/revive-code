@@ -6,9 +6,19 @@ interface ReviewHeaderProps {
   timestamp?: string;
   onExportJSON: () => void;
   onExportPDF: () => void;
+  onExportMarkdown: () => void;
+  onExportCSV: () => void;
 }
 
-export default function ReviewHeader({ id, language, timestamp, onExportJSON, onExportPDF }: ReviewHeaderProps) {
+export default function ReviewHeader({ 
+  id, 
+  language, 
+  timestamp, 
+  onExportJSON, 
+  onExportPDF,
+  onExportMarkdown,
+  onExportCSV
+}: ReviewHeaderProps) {
   const formattedDate = timestamp 
     ? new Date(timestamp).toLocaleDateString(undefined, {
         weekday: 'long',
@@ -21,7 +31,7 @@ export default function ReviewHeader({ id, language, timestamp, onExportJSON, on
     : 'Unknown Date';
 
   return (
-    <div className="bg-surface-card border border-hairline rounded-lg p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+    <div className="bg-surface-card border border-hairline rounded-lg p-6 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
       <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-2.5">
           <h2 className="text-xl font-serif text-ink font-semibold">Code Review Report</h2>
@@ -37,21 +47,37 @@ export default function ReviewHeader({ id, language, timestamp, onExportJSON, on
         </p>
       </div>
 
-      <div className="flex items-center gap-3 font-sans w-full sm:w-auto">
-        <button
-          onClick={onExportJSON}
-          className="flex-1 sm:flex-none text-xs font-semibold px-4 py-2 border border-hairline hover:border-primary/30 text-ink bg-canvas hover:bg-surface-cream-strong transition-colors rounded-sm flex items-center justify-center gap-1.5 focus:outline-none"
-        >
-          <span>📥</span> Export JSON
-        </button>
+      <div className="flex flex-wrap items-center gap-2.5 font-sans w-full lg:w-auto">
         <button
           onClick={onExportPDF}
-          className="flex-1 sm:flex-none text-xs font-semibold px-4 py-2 border border-hairline hover:border-primary/30 text-ink bg-canvas hover:bg-surface-cream-strong transition-colors rounded-sm flex items-center justify-center gap-1.5 focus:outline-none"
-          title="Print to PDF"
+          className="flex-1 sm:flex-none text-xs font-semibold px-3 py-2 border border-hairline hover:border-primary/30 text-ink bg-canvas hover:bg-surface-cream-strong transition-colors rounded-sm flex items-center justify-center gap-1.5 focus:outline-none"
+          title="Print or Save Report as PDF"
         >
-          <span>📄</span> Export PDF
+          <span>📄</span> PDF Report
+        </button>
+        <button
+          onClick={onExportMarkdown}
+          className="flex-1 sm:flex-none text-xs font-semibold px-3 py-2 border border-hairline hover:border-primary/30 text-ink bg-canvas hover:bg-surface-cream-strong transition-colors rounded-sm flex items-center justify-center gap-1.5 focus:outline-none"
+          title="Download Report as Markdown"
+        >
+          <span>📝</span> Markdown
+        </button>
+        <button
+          onClick={onExportCSV}
+          className="flex-1 sm:flex-none text-xs font-semibold px-3 py-2 border border-hairline hover:border-primary/30 text-ink bg-canvas hover:bg-surface-cream-strong transition-colors rounded-sm flex items-center justify-center gap-1.5 focus:outline-none"
+          title="Download Issues as CSV"
+        >
+          <span>📊</span> CSV Spreadsheet
+        </button>
+        <button
+          onClick={onExportJSON}
+          className="flex-1 sm:flex-none text-xs font-semibold px-3 py-2 border border-hairline hover:border-primary/30 text-ink bg-canvas hover:bg-surface-cream-strong transition-colors rounded-sm flex items-center justify-center gap-1.5 focus:outline-none"
+          title="Download Report as JSON"
+        >
+          <span>📥</span> JSON Data
         </button>
       </div>
     </div>
   );
 }
+

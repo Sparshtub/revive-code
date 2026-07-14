@@ -27,27 +27,28 @@ export default function RepositoryHistory({
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        const fetchHistory = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/v1/github/history`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) throw new Error('Failed to load GitHub scans history');
+                const data = await res.json();
+                setHistory(data.history || []);
+            } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : String(err);
+                setError(message || 'Failed to fetch scan history');
+            } finally {
+                setLoading(false);
+            }
+        };
+
         if (token) {
             fetchHistory();
         }
     }, [token, refreshTrigger]);
-
-    const fetchHistory = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const res = await fetch(`${API_BASE_URL}/api/v1/github/history`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!res.ok) throw new Error('Failed to load GitHub scans history');
-            const data = await res.json();
-            setHistory(data.history || []);
-        } catch (err: any) {
-            setError(err.message || 'Failed to fetch scan history');
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const getCleanRepoLabel = (rawLabel: string) => {
         const lines = rawLabel.split('\n');

@@ -39,27 +39,28 @@ export default function RepositorySelector({
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        const fetchRepositories = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/v1/github/repositories`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) throw new Error('Failed to fetch repositories list');
+                const data = await res.json();
+                setRepositories(data.repositories || []);
+            } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : String(err);
+                setError(message || 'Failed to load repositories');
+            } finally {
+                setLoading(false);
+            }
+        };
+
         if (token) {
             fetchRepositories();
         }
     }, [token]);
-
-    const fetchRepositories = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const res = await fetch(`${API_BASE_URL}/api/v1/github/repositories`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!res.ok) throw new Error('Failed to fetch repositories list');
-            const data = await res.ok ? await res.json() : { repositories: [] };
-            setRepositories(data.repositories || []);
-        } catch (err: any) {
-            setError(err.message || 'Failed to load repositories');
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const handleRepoChange = async (repoFullName: string) => {
         if (!repoFullName) {

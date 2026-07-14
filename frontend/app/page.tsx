@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { API_BASE_URL } from '@/lib/config';
 import Editor from '@monaco-editor/react';
 import ScoreCard from '@/components/ScoreCard';
@@ -115,9 +115,9 @@ const NeuralFingerprint = ({ embedding }: { embedding: number[] }) => {
     const cellWidth = canvas.width / cols;
     const cellHeight = canvas.height / rows;
     
-    let minVal = Math.min(...embedding);
-    let maxVal = Math.max(...embedding);
-    let range = maxVal - minVal || 1.0;
+    const minVal = Math.min(...embedding);
+    const maxVal = Math.max(...embedding);
+    const range = maxVal - minVal || 1.0;
     
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
@@ -309,14 +309,7 @@ export default function Home() {
       .catch(() => setApiHealth('disconnected'));
   }, []);
 
-  // Fetch History whenever auth state changes or history drawer opens
-  useEffect(() => {
-    if (isAuthenticated && token && isHistoryOpen) {
-      fetchHistory();
-    }
-  }, [isAuthenticated, token, isHistoryOpen]);
-
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/history`, {
@@ -333,7 +326,14 @@ export default function Home() {
     } finally {
       setHistoryLoading(false);
     }
-  };
+  }, [token]);
+
+  // Fetch History whenever auth state changes or history drawer opens
+  useEffect(() => {
+    if (isAuthenticated && token && isHistoryOpen) {
+      fetchHistory();
+    }
+  }, [isAuthenticated, token, isHistoryOpen, fetchHistory]);
 
   // Perform standard single-file code review
   const handleReview = async () => {
@@ -366,8 +366,9 @@ export default function Home() {
       if (isAuthenticated) {
         fetchHistory();
       }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred while reviewing the code.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || 'An error occurred while reviewing the code.');
     } finally {
       setLoading(false);
     }
@@ -391,7 +392,7 @@ export default function Home() {
       }
 
       let endpoint = '/github/repository';
-      let payload: Record<string, any> = { repository_url: githubUrl.trim() };
+      const payload: Record<string, string | number> = { repository_url: githubUrl.trim() };
 
       if (githubMode === 'pr') {
         endpoint = '/github/pr';
@@ -420,8 +421,9 @@ export default function Home() {
       if (isAuthenticated) {
         fetchHistory();
       }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred during GitHub repository analysis.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || 'An error occurred during GitHub repository analysis.');
     } finally {
       setLoading(false);
     }
@@ -460,8 +462,9 @@ export default function Home() {
       }
       
       setReviewResult(data);
-    } catch (err: any) {
-      setError(err.message || 'Error occurred loading the review.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || 'Error occurred loading the review.');
     } finally {
       setLoading(false);
     }
