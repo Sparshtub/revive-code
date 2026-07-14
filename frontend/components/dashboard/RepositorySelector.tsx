@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '@/lib/config';
 
 interface Repository {
     name: string;
@@ -47,7 +48,7 @@ export default function RepositorySelector({
         setLoading(true);
         setError(null);
         try {
-            const res = await fetch('http://127.0.0.1:8000/api/v1/github/repositories', {
+            const res = await fetch(`${API_BASE_URL}/api/v1/github/repositories`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!res.ok) throw new Error('Failed to fetch repositories list');
@@ -77,7 +78,7 @@ export default function RepositorySelector({
         setBranchesLoading(true);
         setBranches([]);
         try {
-            const res = await fetch(`http://127.0.0.1:8000/api/v1/github/repositories/${repoFullName}`, {
+            const res = await fetch(`${API_BASE_URL}/api/v1/github/repositories/${repoFullName}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {

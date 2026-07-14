@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { API_BASE_URL } from '@/lib/config';
 import { useAuth } from './AuthContext';
 
 interface AuthModalProps {
@@ -40,7 +41,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
     try {
       const endpoint = isSignUp ? '/auth/signup' : '/auth/login';
-      const response = await fetch(`http://127.0.0.1:8000/api/v1${endpoint}`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -56,7 +57,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
       if (isSignUp) {
         // Automatically log in after successful signup
-        const loginResponse = await fetch('http://127.0.0.1:8000/api/v1/auth/login', {
+        const loginResponse = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

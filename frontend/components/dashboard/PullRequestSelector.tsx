@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '@/lib/config';
 
 interface PR {
     number: number;
@@ -56,7 +57,7 @@ export default function PullRequestSelector({
         setError(null);
         setSelectedPrNumber(null);
         try {
-            const res = await fetch(`http://127.0.0.1:8000/api/v1/github/repositories/${repoFullName}/pulls`, {
+            const res = await fetch(`${API_BASE_URL}/api/v1/github/repositories/${repoFullName}/pulls`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!res.ok) throw new Error('Failed to load pull requests');

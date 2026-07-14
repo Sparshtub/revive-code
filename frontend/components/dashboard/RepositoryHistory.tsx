@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '@/lib/config';
 
 interface HistoryItem {
     id: string;
@@ -35,7 +36,7 @@ export default function RepositoryHistory({
         setLoading(true);
         setError(null);
         try {
-            const res = await fetch('http://127.0.0.1:8000/api/v1/github/history', {
+            const res = await fetch(`${API_BASE_URL}/api/v1/github/history`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!res.ok) throw new Error('Failed to load GitHub scans history');

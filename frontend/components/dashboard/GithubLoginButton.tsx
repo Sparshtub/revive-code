@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '@/lib/config';
 
 interface GithubLoginButtonProps {
     token: string | null;
@@ -31,13 +32,13 @@ export default function GithubLoginButton({
 
     const checkConnection = async () => {
         try {
-            const res = await fetch('http://127.0.0.1:8000/api/v1/github/repositories', {
+            const res = await fetch(`${API_BASE_URL}/api/v1/github/repositories`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
                 // If this succeeds, it means user is connected.
                 // Let's get user profile info or default
-                const profileRes = await fetch('http://127.0.0.1:8000/api/v1/github/connect', {
+                const profileRes = await fetch(`${API_BASE_URL}/api/v1/github/connect`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -63,7 +64,7 @@ export default function GithubLoginButton({
         setError(null);
         try {
             if (mode === 'mock') {
-                const res = await fetch('http://127.0.0.1:8000/api/v1/github/connect', {
+                const res = await fetch(`${API_BASE_URL}/api/v1/github/connect`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -95,7 +96,7 @@ export default function GithubLoginButton({
     const handleDisconnect = async () => {
         setLoading(true);
         try {
-            const res = await fetch('http://127.0.0.1:8000/api/v1/github/disconnect', {
+            const res = await fetch(`${API_BASE_URL}/api/v1/github/disconnect`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` }
             });

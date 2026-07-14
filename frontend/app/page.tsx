@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { API_BASE_URL } from '@/lib/config';
 import Editor from '@monaco-editor/react';
 import ScoreCard from '@/components/ScoreCard';
 import ReviewCard, { Issue } from '@/components/ReviewCard';
@@ -300,7 +301,7 @@ export default function Home() {
 
   // Check API health status on mount
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/health')
+    fetch(`${API_BASE_URL}/health`)
       .then((res) => {
         if (res.ok) setApiHealth('connected');
         else setApiHealth('disconnected');
@@ -318,7 +319,7 @@ export default function Home() {
   const fetchHistory = async () => {
     setHistoryLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/v1/history', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/history`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -348,7 +349,7 @@ export default function Home() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch('http://127.0.0.1:8000/api/v1/review', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/review`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ code, language }),
@@ -403,7 +404,7 @@ export default function Home() {
         payload.branch = githubBranch.trim() || 'main';
       }
 
-      const response = await fetch(`http://127.0.0.1:8000/api/v1${endpoint}`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1${endpoint}`, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload),
@@ -434,7 +435,7 @@ export default function Home() {
     setIsHistoryOpen(false); // close drawer
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/v1/review/${historyId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/review/${historyId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -472,7 +473,7 @@ export default function Home() {
     if (!confirm("Are you sure you want to delete this review?")) return;
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/v1/review/${historyId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/review/${historyId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -845,7 +846,7 @@ export default function Home() {
                                   'Content-Type': 'application/json',
                                   'Authorization': `Bearer ${token}`
                                 };
-                                const res = await fetch('http://127.0.0.1:8000/api/v1/github/review', {
+                                const res = await fetch(`${API_BASE_URL}/api/v1/github/review`, {
                                   method: 'POST',
                                   headers,
                                   body: JSON.stringify({ repository_url: url, branch: br })
@@ -873,7 +874,7 @@ export default function Home() {
                                     'Content-Type': 'application/json',
                                     'Authorization': `Bearer ${token}`
                                   };
-                                  const res = await fetch('http://127.0.0.1:8000/api/v1/github/pull-request/review', {
+                                  const res = await fetch(`${API_BASE_URL}/api/v1/github/pull-request/review`, {
                                     method: 'POST',
                                     headers,
                                     body: JSON.stringify({ repository_url: selectedRepoUrl, pr_number: prNum })
@@ -899,7 +900,7 @@ export default function Home() {
                             onDeleteItem={async (id) => {
                               if (confirm('Are you sure you want to delete this scan log?')) {
                                 try {
-                                  const res = await fetch(`http://127.0.0.1:8000/api/v1/review/${id}`, {
+                                  const res = await fetch(`${API_BASE_URL}/api/v1/review/${id}`, {
                                     method: 'DELETE',
                                     headers: { 'Authorization': `Bearer ${token}` }
                                   });

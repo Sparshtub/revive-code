@@ -1,0 +1,40 @@
+services:
+  postgres:
+    ports:
+      # Omit or restrict port bindings for production environments
+      - "127.0.0.1:5432:5432"
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  backend:
+    volumes:
+      # Production excludes local host bind mounts; only preserves Hugging Face cache
+      - /app/.cache/huggingface
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M # CodeBERT model loading and inference requires a larger memory budget
+
+  frontend:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
