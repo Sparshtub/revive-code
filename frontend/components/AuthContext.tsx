@@ -10,7 +10,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean;
 }
-
+// sparsh is good 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
