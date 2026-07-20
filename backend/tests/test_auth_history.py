@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 from app.db import get_db_connection
-
+# changes are needed 
 client = TestClient(app)
 
 @pytest.fixture(autouse=True)
