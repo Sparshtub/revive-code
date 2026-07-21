@@ -4,7 +4,7 @@ from app.main import app
 from app.db import get_db_connection
 # changes are needed 
 client = TestClient(app)
-
+# we need to fix
 @pytest.fixture(autouse=True)
 def clean_db():
     """
